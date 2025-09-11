@@ -36,7 +36,6 @@ Use Eden only in environments where you have explicit authorization. Unauthorize
 - **Multi‑client queues**: Per‑client message queues (camera, screen, other) with priority handling
 - **Operator coordination**: Target specific clients or broadcast; high‑priority responses bypass queues
 - **Authentication API**: Login, token verification, logout, and credential updates with session expiry
-- **Static + PHP**: Serve static files from the project directory; `.php` files are executed via local PHP if installed
 
 
 ## Requirements
