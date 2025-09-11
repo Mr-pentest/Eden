@@ -40,8 +40,8 @@ Use Eden only in environments where you have explicit authorization. Unauthorize
 
 ## Requirements
 
-- Windows 10/11 (tested path: PowerShell)
-- Python 3.8+
+- Windows 10/11 or Linux 
+- Python 
 - Internet access (for optional ngrok exposure)
 - Node.js + npm (installed automatically by `startup.py` if missing)
 - Optional: PHP in PATH if you plan to serve/execute `.php` files via the middleware
