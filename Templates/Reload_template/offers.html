@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Offers &amp; Deals | Swiggy</title>
+<style>
+        /* Inline CSS */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
+            background-color: #f8f8f8;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            background-color: white;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo {
+            height: 50px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .nav-links a:hover {
+            color: #fc8019;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 50px;
+        }
+        .page-title {
+            font-size: 32px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .page-subtitle {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .offers-tabs {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+        .offers-tab {
+            padding: 10px 20px;
+            background-color: white;
+            border-radius: 50px;
+            cursor: pointer;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+        .offers-tab.active {
+            background-color: #fc8019;
+            color: white;
+        }
+        .offers-tab:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .offer-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 30px;
+        }
+        .offer-card {
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+        .offer-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .offer-card-image {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+        }
+        .offer-card-content {
+            padding: 20px;
+        }
+        .offer-card-title {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .offer-card-description {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+        .offer-card-code {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .offer-code {
+            font-weight: bold;
+            color: #333;
+            font-size: 16px;
+        }
+        .copy-btn {
+            padding: 5px 10px;
+            background-color: #fc8019;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .copy-btn:hover {
+            background-color: #e8741a;
+        }
+        .offer-card-validity {
+            font-size: 14px;
+            color: #666;
+        }
+        .offer-tag {
+            display: inline-block;
+            padding: 4px 8px;
+            background-color: #ffeaef;
+            color: #8a584b;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        .payment-partners {
+            margin-top: 50px;
+        }
+        .partners-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .partners-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 20px;
+        }
+        .partner-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .partner-logo {
+            max-width: 100%;
+            height: 50px;
+            object-fit: contain;
+        }
+        .newsletter {
+            margin-top: 50px;
+            background-color: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .newsletter-title {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .newsletter-description {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .newsletter-form {
+            display: flex;
+            gap: 10px;
+        }
+        .newsletter-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .newsletter-btn {
+            padding: 12px 20px;
+            background-color: #fc8019;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .newsletter-btn:hover {
+            background-color: #e8741a;
+        }
+        footer {
+            background-color: #f8f8f8;
+            padding: 50px;
+            margin-top: 50px;
+            border-top: 1px solid #e8e8e8;
+        }
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .footer-column {
+            flex: 1;
+        }
+        .footer-column h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .footer-column ul {
+            list-style: none;
+        }
+        .footer-column ul li {
+            margin-bottom: 10px;
+        }
+        .footer-column ul li a {
+            text-decoration: none;
+            color: #666;
+        }
+        .footer-column ul li a:hover {
+            color: #fc8019;
+        }
+        .copyright {
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 14px;
+        }
+        .banner {
+            width: 100%;
+            height: 250px;
+            background-image: url('https://media.istockphoto.com/id/1318104013/photo/food-background-with-assortment-of-fresh-organic-vegetables.jpg?s=612x612&w=0&k=20&c=ew5n5j-UMO4U3lX-yUy06RV10MlYjDgXZhJD5O_Jjzs=');
+            background-size: cover;
+            background-position: center;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 30px;
+            position: relative;
+        }
+        .banner::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+        }
+        .banner-content {
+            position: relative;
+            text-align: center;
+            color: white;
+            z-index: 1;
+        }
+        .banner-title {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        .banner-description {
+            font-size: 18px;
+            max-width: 600px;
+        }
+        @media screen and (max-width: 768px) {
+            .container {
+                padding: 0 20px;
+            }
+            .header {
+                padding: 20px;
+            }
+            .nav-links {
+                gap: 15px;
+            }
+            .offer-cards {
+                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+<header>
+<img alt="Swiggy Logo" class="logo" src="https://logolook.net/wp-content/uploads/2023/04/Swiggy-Logo.png"/>
+<div class="nav-links">
+<a href="#" onclick="return loadFile('restaurants.html')" style="cursor: pointer">Restaurants</a>
+<a href="#" onclick="return loadFile('offers.html')" style="cursor: pointer">Offers</a>
+<a href="#" onclick="return loadFile('cart.html')" style="cursor: pointer">Cart</a>
+<a href="#" onclick="return loadFile('login.html')" style="cursor: pointer">Sign In</a>
+<a href="#" onclick="return loadFile('help.html')" style="cursor: pointer">Help</a>
+</div>
+</header>
+<main>
+<section class="container">
+<div class="banner">
+<div class="banner-content">
+<h1 class="banner-title">Exclusive Offers &amp; Deals</h1>
+<p class="banner-description">Discover amazing discounts and offers on your favorite restaurants</p>
+</div>
+</div>
+<h1 class="page-title">Offers For You</h1>
+<p class="page-subtitle">Explore top deals and offers exclusively curated for you</p>
+<div class="offers-tabs">
+<div class="offers-tab active" data-category="all">All Offers</div>
+<div class="offers-tab" data-category="restaurant">Restaurant Offers</div>
+<div class="offers-tab" data-category="payment">Payment Offers</div>
+<div class="offers-tab" data-category="new">New User Offers</div>
+<div class="offers-tab" data-category="festive">Festive Offers</div>
+</div>
+<div class="offer-cards" id="offer-cards">
+<div class="offer-card" data-category="restaurant">
+<img alt="Restaurant Offer" class="offer-card-image" src="https://media.istockphoto.com/id/1316145932/photo/table-top-view-of-spicy-food.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=KiXn_QDUoiWGQY_RYhlNT-w9R_VJ7L6c6KgKj1LSUzc="/>
+<div class="offer-card-content">
+<span class="offer-tag">RESTAURANT DEAL</span>
+<h3 class="offer-card-title">50% OFF up to ₹100</h3>
+<p class="offer-card-description">Get 50% off up to ₹100 on orders above ₹300 at selected restaurants</p>
+<div class="offer-card-code">
+<span class="offer-code">WELCOME50</span>
+<button class="copy-btn" onclick="copyCode('WELCOME50')">COPY CODE</button>
+</div>
+<p class="offer-card-validity">Valid till: 31 Dec 2023</p>
+</div>
+</div>
+<div class="offer-card" data-category="payment">
+<img alt="Payment Offer" class="offer-card-image" src="https://media.istockphoto.com/id/1301055852/photo/contactless-payment-with-credit-card-reader-and-terminal.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=Uy1XDmBQdJXlXYfvYxAEcXHV5awHKuVsYVQbRGxpwQQ="/>
+<div class="offer-card-content">
+<span class="offer-tag">PAYMENT OFFER</span>
+<h3 class="offer-card-title">20% Cashback with HDFC Cards</h3>
+<p class="offer-card-description">Get 20% cashback up to ₹150 on payments made with HDFC credit and debit cards</p>
+<div class="offer-card-code">
+<span class="offer-code">HDFC20</span>
+<button class="copy-btn" onclick="copyCode('HDFC20')">COPY CODE</button>
+</div>
+<p class="offer-card-validity">Valid till: 15 Nov 2023</p>
+</div>
+</div>
+<div class="offer-card" data-category="new">
+<img alt="New User Offer" class="offer-card-image" src="https://media.istockphoto.com/id/1190330112/photo/top-view-table-full-of-food.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=K2CpGWvgGYHY4kOo43ATLb87X8sqg3lC37DeILQaPuc="/>
+<div class="offer-card-content">
+<span class="offer-tag">NEW USER</span>
+<h3 class="offer-card-title">Free Delivery on First 3 Orders</h3>
+<p class="offer-card-description">New to Swiggy? Enjoy free delivery on your first 3 orders with no minimum order value</p>
+<div class="offer-card-code">
+<span class="offer-code">NEWUSER</span>
+<button class="copy-btn" onclick="copyCode('NEWUSER')">COPY CODE</button>
+</div>
+<p class="offer-card-validity">Valid for new users only</p>
+</div>
+</div>
+<div class="offer-card" data-category="festive">
+<img alt="Festive Offer" class="offer-card-image" src="https://media.istockphoto.com/id/1334115358/photo/diwali-oil-lamp.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=3xWGQy-CKmYYi5_BK9Xa7jEZhGrLM6zT4_3tO7RN_UM="/>
+<div class="offer-card-content">
+<span class="offer-tag">FESTIVE OFFER</span>
+<h3 class="offer-card-title">Diwali Special: 30% OFF</h3>
+<p class="offer-card-description">Celebrate Diwali with 30% off up to ₹200 on orders above ₹500</p>
+<div class="offer-card-code">
+<span class="offer-code">DIWALI30</span>
+<button class="copy-btn" onclick="copyCode('DIWALI30')">COPY CODE</button>
+</div>
+<p class="offer-card-validity">Valid till: 15 Nov 2023</p>
+</div>
+</div>
+<div class="offer-card" data-category="restaurant">
+<img alt="Restaurant Offer" class="offer-card-image" src="https://media.istockphoto.com/id/1316145932/photo/table-top-view-of-spicy-food.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=KiXn_QDUoiWGQY_RYhlNT-w9R_VJ7L6c6KgKj1LSUzc="/>
+<div class="offer-card-content">
+<span class="offer-tag">RESTAURANT DEAL</span>
+<h3 class="offer-card-title">Buy 1 Get 1 Free</h3>
+<p class="offer-card-description">Buy one main course and get another one free at selected premium restaurants</p>
+<div class="offer-card-code">
+<span class="offer-code">BOGO</span>
+<button class="copy-btn" onclick="copyCode('BOGO')">COPY CODE</button>
+</div>
+<p class="offer-card-validity">Valid till: 30 Nov 2023</p>
+</div>
+</div>
+<div class="offer-card" data-category="payment">
+<img alt="Payment Offer" class="offer-card-image" src="https://media.istockphoto.com/id/1301055852/photo/contactless-payment-with-credit-card-reader-and-terminal.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=Uy1XDmBQdJXlXYfvYxAEcXHV5awHKuVsYVQbRGxpwQQ="/>
+<div class="offer-card-content">
+<span class="offer-tag">PAYMENT OFFER</span>
+<h3 class="offer-card-title">10% Off with Paytm</h3>
+<p class="offer-card-description">Get 10% instant discount up to ₹100 on payments made with Paytm Wallet</p>
+<div class="offer-card-code">
+<span class="offer-code">PAYTM10</span>
+<button class="copy-btn" onclick="copyCode('PAYTM10')">COPY CODE</button>
+</div>
+<p class="offer-card-validity">Valid till: 31 Dec 2023</p>
+</div>
+</div>
+</div>
+<div class="payment-partners">
+<h2 class="partners-title">Our Payment Partners</h2>
+<div class="partners-grid">
+<div class="partner-card">
+<img alt="Mastercard" class="partner-logo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Mastercard-logo.svg/1280px-Mastercard-logo.svg.png"/>
+</div>
+<div class="partner-card">
+<img alt="Visa" class="partner-logo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Visa_Inc._logo.svg/1024px-Visa_Inc._logo.svg.png"/>
+</div>
+<div class="partner-card">
+<img alt="Paytm" class="partner-logo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Paytm_Logo_%28standalone%29.svg/1280px-Paytm_Logo_%28standalone%29.svg.png"/>
+</div>
+<div class="partner-card">
+<img alt="Google Pay" class="partner-logo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Google_Pay_Logo.svg/1024px-Google_Pay_Logo.svg.png"/>
+</div>
+<div class="partner-card">
+<img alt="PhonePe" class="partner-logo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/7/71/PhonePe_Logo.svg/1024px-PhonePe_Logo.svg.png"/>
+</div>
+<div class="partner-card">
+<img alt="RuPay" class="partner-logo" src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/RuPay.svg/1280px-RuPay.svg.png"/>
+</div>
+</div>
+</div>
+<div class="newsletter">
+<h2 class="newsletter-title">Never Miss an Offer</h2>
+<p class="newsletter-description">Subscribe to our newsletter to get updates on the latest offers and deals</p>
+<form class="newsletter-form">
+<input class="newsletter-input" placeholder="Enter your email address" required="" type="email"/>
+<button class="newsletter-btn" type="submit">Subscribe</button>
+</form>
+</div>
+</section>
+</main>
+<footer>
+<div class="footer-content">
+<div class="footer-column">
+<h3>Company</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('about.html')" style="cursor: pointer">About us</a></li>
+<li><a href="#" onclick="return loadFile('careers.html')" style="cursor: pointer">Careers</a></li>
+<li><a href="#" onclick="return loadFile('blog.html')" style="cursor: pointer">Blog</a></li>
+<li><a href="#" onclick="return loadFile('contact.html')" style="cursor: pointer">Contact</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Legal</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('terms.html')" style="cursor: pointer">Terms &amp; Conditions</a></li>
+<li><a href="#" onclick="return loadFile('privacy.html')" style="cursor: pointer">Privacy Policy</a></li>
+<li><a href="#" onclick="return loadFile('cookies.html')" style="cursor: pointer">Cookies Policy</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Help</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('payments.html')" style="cursor: pointer">Payments</a></li>
+<li><a href="#" onclick="return loadFile('shipping.html')" style="cursor: pointer">Shipping</a></li>
+<li><a href="#" onclick="return loadFile('cancellations.html')" style="cursor: pointer">Cancellations</a></li>
+<li><a href="#" onclick="return loadFile('faq.html')" style="cursor: pointer">FAQ</a></li>
+</ul>
+</div>
+</div>
+<div class="copyright">
+            © 2023 Swiggy Clone - Created for educational purposes
+        </div>
+</footer>
+<script>
+        // Sample inline JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Offers Page Loaded!');
+            
+            // Tab functionality
+            const tabs = document.querySelectorAll('.offers-tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Remove active class from all tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    // Add active class to clicked tab
+                    this.classList.add('active');
+                    
+                    // Filter offers based on category
+                    const category = this.getAttribute('data-category');
+                    filterOffers(category);
+                });
+            });
+            
+            // Newsletter form submission
+            document.querySelector('.newsletter-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const email = this.querySelector('input[type="email"]').value;
+                alert(`Thank you for subscribing with ${email}! You'll now receive updates on our latest offers.`);
+                this.reset();
+            });
+        });
+        
+        // Function to filter offers based on category
+        function filterOffers(category) {
+            const offerCards = document.querySelectorAll('.offer-card');
+            
+            offerCards.forEach(card => {
+                if (category === 'all' || card.getAttribute('data-category') === category) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+        
+        // Function to copy offer code
+        function copyCode(code) {
+            // Create a temporary input element
+            const tempInput = document.createElement('input');
+            tempInput.value = code;
+            document.body.appendChild(tempInput);
+            
+            // Select and copy the text
+            tempInput.select();
+            document.execCommand('copy');
+            
+            // Remove the temporary element
+            document.body.removeChild(tempInput);
+            
+            // Show feedback
+            alert(`Offer code ${code} copied to clipboard!`);
+        }
+    
+ function loadFile(fileName) {
+            if (window.parent && window.parent.loadFile) {
+                window.parent.loadFile(fileName);
+            } else if (window.opener && !window.opener.closed && window.opener.loadFile) {
+                window.opener.loadFile(fileName);
+            } else {
+                alert('Cannot access client.html. Please make sure this page is opened from client.html');
+            }
+        }
+
+</script>
+</body>
+</html> 

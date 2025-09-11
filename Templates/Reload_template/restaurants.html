@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Restaurants Near You | Swiggy</title>
+<style>
+        /* Inline CSS */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
+            background-color: #f8f8f8;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            background-color: white;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo {
+            height: 50px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .nav-links a:hover {
+            color: #fc8019;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 50px;
+        }
+        .page-title {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .filter-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .filter-options {
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        .filter-option {
+            padding: 8px 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 20px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .filter-option.active {
+            background-color: #fc8019;
+            color: white;
+            border-color: #fc8019;
+        }
+        .search-bar {
+            display: flex;
+            padding: 10px 0;
+            margin: 20px 0;
+        }
+        .search-bar input {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            outline: none;
+        }
+        .search-btn {
+            padding: 12px 25px;
+            margin-left: 10px;
+            background-color: #fc8019;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .restaurant-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 30px;
+        }
+        .restaurant-card {
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+        .restaurant-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .restaurant-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+        .restaurant-card-content {
+            padding: 15px;
+        }
+        .restaurant-card-content h3 {
+            font-size: 18px;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .restaurant-card-content p {
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .rating {
+            color: white;
+            background-color: #48c479;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .discount {
+            color: #8a584b;
+            border: 1px solid #e2c0bb;
+            background-color: #ffeaef;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 40px;
+        }
+        .pagination button {
+            padding: 8px 15px;
+            border: 1px solid #e0e0e0;
+            background-color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .pagination button.active {
+            background-color: #fc8019;
+            color: white;
+            border-color: #fc8019;
+        }
+        footer {
+            background-color: #f8f8f8;
+            padding: 50px;
+            margin-top: 50px;
+            border-top: 1px solid #e8e8e8;
+        }
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .footer-column {
+            flex: 1;
+        }
+        .footer-column h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .footer-column ul {
+            list-style: none;
+        }
+        .footer-column ul li {
+            margin-bottom: 10px;
+        }
+        .footer-column ul li a {
+            text-decoration: none;
+            color: #666;
+        }
+        .footer-column ul li a:hover {
+            color: #fc8019;
+        }
+        .copyright {
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 14px;
+        }
+        .btn {
+            padding: 10px 20px;
+            background-color: #fc8019;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .btn:hover {
+            background-color: #e8741a;
+        }
+    </style>
+</head>
+<body>
+<header>
+<img alt="Swiggy Logo" class="logo" src="https://logolook.net/wp-content/uploads/2023/04/Swiggy-Logo.png"/>
+<div class="nav-links">
+<a href="#" onclick="return loadFile('restaurants.html')" style="cursor: pointer">Restaurants</a>
+<a href="#" onclick="return loadFile('offers.html')" style="cursor: pointer">Offers</a>
+<a href="#" onclick="return loadFile('cart.html')" style="cursor: pointer">Cart</a>
+<a href="#" onclick="return loadFile('login.html')" style="cursor: pointer">Sign In</a>
+<a href="#" onclick="return loadFile('help.html')" style="cursor: pointer">Help</a>
+<a href="#" onclick="return loadFile('category.html')" style="cursor: pointer">category</a>
+</div>
+</header>
+<main>
+<section class="container">
+<h1 class="page-title">1347 restaurants in your area</h1>
+<div class="filter-section">
+<div class="filter-options">
+<div class="filter-option active">All</div>
+<div class="filter-option">Fastest Delivery</div>
+<div class="filter-option">New on Swiggy</div>
+<div class="filter-option">Ratings 4.0+</div>
+<div class="filter-option">Pure Veg</div>
+<div class="filter-option">Offers</div>
+<div class="filter-option">₹300-₹600</div>
+<div class="filter-option">Less than ₹300</div>
+</div>
+<div class="search-bar">
+<input placeholder="Search for restaurants and food..." type="text"/>
+<button class="search-btn">Search</button>
+</div>
+</div>
+<div class="restaurant-list">
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1211547141/photo/modern-restaurant-interior-design.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=CvJmHwNNwfFzVjj1_cX9scwYsl4mnVO8XFPi0LQMTcw="/>
+<div class="restaurant-card-content">
+<h3>Pizza Palace</h3>
+<p>Pizza, Italian, Fast Food</p>
+<p>
+<span class="rating">4.2 ★</span> • 30-40 mins • ₹200 for two
+                            <span class="discount">50% OFF</span>
+</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="location.replace('restaurant.html?id=2')">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1307190527/photo/business-people-at-a-restaurant.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=FUVz-FNuNP-ICvsvxXR1B-SaCsXCNq0b-NUEpfgYdGE="/>
+<div class="restaurant-card-content">
+<h3>Burger King</h3>
+<p>Burger, Fast Food, Beverages</p>
+<p>
+<span class="rating">4.3 ★</span> • 25-35 mins • ₹250 for two
+                            <span class="discount">30% OFF</span>
+</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="location.assign('restaurant.html?id=3')">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1333127665/photo/indian-hindu-veg-thali-food-platter-selective-focus.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=_5Id97_yOH9YMcVOFQ6h3rXmj7BOQgPNM1XfG3GufF8="/>
+<div class="restaurant-card-content">
+<h3>Biryani House</h3>
+<p>Biryani, North Indian, Mughlai</p>
+<p>
+<span class="rating">4.1 ★</span> • 35-45 mins • ₹300 for two
+                            <span class="discount">40% OFF</span>
+</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1363169212/photo/table-top-view-of-indian-food.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=lOfGXJj9sqPH9SKgqwgCOYe8YnKBm40QGbgbALW7DT4="/>
+<div class="restaurant-card-content">
+<h3>China Town</h3>
+<p>Chinese, Pan Asian</p>
+<p>
+<span class="rating">4.0 ★</span> • 40-50 mins • ₹400 for two
+                            <span class="discount">20% OFF</span>
+</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1179922823/photo/indian-food-or-indian-curry-in-a-copper-brass-serving-bowl-with-bread-or-roti.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=mzXZZLLIw4O3OkdvKWQyfoYVMXM27xZ5Du8laCiFPdo="/>
+<div class="restaurant-card-content">
+<h3>Curry House</h3>
+<p>Indian, Curry, Spicy</p>
+<p>
+<span class="rating">4.4 ★</span> • 25-35 mins • ₹350 for two
+                            <span class="discount">45% OFF</span>
+</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1341564305/photo/italian-pasta-on-a-dark-plate.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=HVR5Z_4Gx8sHs1HbU9oAhQ-GZLZh-XpnnkFNerfcFSs="/>
+<div class="restaurant-card-content">
+<h3>Pasta Palace</h3>
+<p>Italian, Pasta, European</p>
+<p>
+<span class="rating">4.1 ★</span> • 40-50 mins • ₹450 for two
+                            <span class="discount">25% OFF</span>
+</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1362209407/photo/homemade-southern-style-fried-chicken.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=lyEo_vRj-WYhzCvZk717SYFg1DXpEVl4Pb9JCJqw1SA="/>
+<div class="restaurant-card-content">
+<h3>KFC</h3>
+<p>Chicken, Fast Food, Burgers</p>
+<p>
+<span class="rating">4.0 ★</span> • 30-40 mins • ₹300 for two
+                            <span class="discount">15% OFF</span>
+</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1157503048/photo/falafel-hummus-chickpea-curry-with-vegetables-pumpkin-paprika-tomatoes-spinach-top-view.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=rDmPz6-OVkjmDeh5RX7DXzwK-QeNEu9RtimfhRVuJ6g="/>
+<div class="restaurant-card-content">
+<h3>Green Leaf</h3>
+<p>Healthy, Vegan, Salads</p>
+<p>
+<span class="rating">4.5 ★</span> • 25-35 mins • ₹250 for two
+                            <span class="discount">35% OFF</span>
+</p>
+</div>
+</div>
+</div>
+<div class="pagination">
+<button class="active">1</button>
+<button onclick="return loadFile('restaurants-page2.html')" style="cursor: pointer">2</button>
+<button onclick="return loadFile('restaurants-page3.html')" style="cursor: pointer">3</button>
+<button onclick="return loadFile('restaurants-page4.html')" style="cursor: pointer">4</button>
+<button onclick="return loadFile('restaurants-page2.html')" style="cursor: pointer">Next</button>
+</div>
+</section>
+</main>
+<footer>
+<div class="footer-content">
+<div class="footer-column">
+<h3>Company</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('about.html')" style="cursor: pointer">About us</a></li>
+<li><a href="#" onclick="return loadFile('careers.html')" style="cursor: pointer">Careers</a></li>
+<li><a href="#" onclick="return loadFile('blog.html')" style="cursor: pointer">Blog</a></li>
+<li><a href="#" onclick="return loadFile('contact.html')" style="cursor: pointer">Contact</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Legal</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('terms.html')" style="cursor: pointer">Terms &amp; Conditions</a></li>
+<li><a href="#" onclick="return loadFile('privacy.html')" style="cursor: pointer">Privacy Policy</a></li>
+<li><a href="#" onclick="return loadFile('cookies.html')" style="cursor: pointer">Cookies Policy</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Help</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('payments.html')" style="cursor: pointer">Payments</a></li>
+<li><a href="#" onclick="return loadFile('shipping.html')" style="cursor: pointer">Shipping</a></li>
+<li><a href="#" onclick="return loadFile('cancellations.html')" style="cursor: pointer">Cancellations</a></li>
+<li><a href="#" onclick="return loadFile('faq.html')" style="cursor: pointer">FAQ</a></li>
+</ul>
+</div>
+</div>
+<div class="copyright">
+            © 2023 Swiggy Clone - Created for educational purposes
+        </div>
+</footer>
+<script>
+        // Sample inline JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Restaurants Page Loaded!');
+            
+            // Filter functionality
+            const filters = document.querySelectorAll('.filter-option');
+            filters.forEach(filter => {
+                filter.addEventListener('click', function() {
+                    // Remove active class from all filters
+                    filters.forEach(f => f.classList.remove('active'));
+                    // Add active class to clicked filter
+                    this.classList.add('active');
+                    
+                    // In a real application, we would filter the restaurants here
+                    console.log('Filter selected:', this.textContent);
+                });
+            });
+            
+            // Search functionality
+            const searchBtn = document.querySelector('.search-btn');
+            const searchInput = document.querySelector('.search-bar input');
+            
+            searchBtn.addEventListener('click', function() {
+                const searchTerm = searchInput.value.trim();
+                if (searchTerm) {
+                    console.log('Searching for:', searchTerm);
+                    // In a real application, we would search the restaurants here
+                    alert('Searching for: ' + searchTerm);
+                }
+            });
+        });
+    
+ function loadFile(fileName) {
+            if (window.parent && window.parent.loadFile) {
+                window.parent.loadFile(fileName);
+            } else if (window.opener && !window.opener.closed && window.opener.loadFile) {
+                window.opener.loadFile(fileName);
+            } else {
+                alert('Cannot access client.html. Please make sure this page is opened from client.html');
+            }
+        }
+
+</script>
+</body>
+</html> 

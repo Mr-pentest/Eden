@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Swiggy - Hungry? Order food now</title>
+<style>
+        /* Inline CSS */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
+            background-color: #f8f8f8;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            background-color: white;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo {
+            height: 50px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .nav-links a:hover {
+            color: #fc8019;
+        }
+        .hero {
+            display: flex;
+            justify-content: space-between;
+            padding: 50px;
+            background-color: white;
+            max-width: 1200px;
+            margin: 20px auto;
+            border-radius: 15px;
+            box-shadow: 0 3px 15px rgba(0, 0, 0, 0.05);
+        }
+        .hero-text {
+            width: 50%;
+            padding-right: 50px;
+        }
+        .hero-text h1 {
+            font-size: 40px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .hero-text p {
+            font-size: 20px;
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+        .search-bar {
+            display: flex;
+            margin-bottom: 30px;
+        }
+        .search-bar input {
+            flex: 1;
+            padding: 15px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px 0 0 5px;
+            outline: none;
+        }
+        .search-btn {
+            padding: 15px 25px;
+            background-color: #fc8019;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 0 5px 5px 0;
+            cursor: pointer;
+        }
+        .hero-image {
+            width: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .hero-image img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+        }
+        .categories {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 50px;
+        }
+        .section-title {
+            font-size: 28px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .category-cards {
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        .category-card {
+            min-width: 150px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        .category-card:hover {
+            transform: translateY(-5px);
+        }
+        .category-card img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 10px;
+        }
+        .category-card h3 {
+            margin-top: 10px;
+            color: #333;
+            font-size: 16px;
+        }
+        .restaurants {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 50px;
+        }
+        .restaurant-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 30px;
+        }
+        .restaurant-card {
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+        .restaurant-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .restaurant-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+        .restaurant-card-content {
+            padding: 15px;
+        }
+        .restaurant-card-content h3 {
+            font-size: 18px;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .restaurant-card-content p {
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .rating {
+            color: white;
+            background-color: #48c479;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        footer {
+            background-color: #f8f8f8;
+            padding: 50px;
+            margin-top: 50px;
+            border-top: 1px solid #e8e8e8;
+        }
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .footer-column {
+            flex: 1;
+        }
+        .footer-column h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .footer-column ul {
+            list-style: none;
+        }
+        .footer-column ul li {
+            margin-bottom: 10px;
+        }
+        .footer-column ul li a {
+            text-decoration: none;
+            color: #666;
+        }
+        .footer-column ul li a:hover {
+            color: #fc8019;
+        }
+        .copyright {
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 14px;
+        }
+        .btn {
+            padding: 10px 20px;
+            background-color: #fc8019;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .btn:hover {
+            background-color: #e8741a;
+        }
+    </style>
+</head>
+<body>
+<header>
+<img alt="Swiggy Logo" class="logo" src="https://logolook.net/wp-content/uploads/2023/04/Swiggy-Logo.png"/>
+<div class="nav-links">
+<a href="#" onclick="return loadFile('restaurants.html')" style="cursor: pointer">Restaurants</a>
+<a href="#" onclick="return loadFile('offers.html')" style="cursor: pointer">Offers</a>
+<a href="#" onclick="return loadFile('cart.html')" style="cursor: pointer">Cart</a>
+<a href="#" onclick="return loadFile('login.html')" style="cursor: pointer">Sign In</a>
+<a href="#" onclick="return loadFile('help.html')" style="cursor: pointer">Help</a>
+<a href="#" onclick="return loadFile('category.html')" style="cursor: pointer">category</a>
+</div>
+</header>
+<main>
+<section class="hero">
+<div class="hero-text">
+<h1>Hungry? Order food online!</h1>
+<p>Order food from favourite restaurants near you. Food cravings? Try Swiggy.</p>
+<div class="search-bar">
+<input placeholder="Enter your delivery location" type="text"/>
+<button class="search-btn" onclick="return loadFile('restaurants.html')" style="cursor: pointer">FIND FOOD</button>
+</div>
+<button class="btn" onclick="return loadFile('restaurants.html')" style="cursor: pointer">Explore Restaurants</button>
+</div>
+<div class="hero-image">
+<img alt="Delicious Food" src="https://www.bing.com/images/search?view=detailV2&amp;ccid=sKDGUtU9&amp;id=7BE320D202B74CD6538275C8D9439A703F008A4D&amp;thid=OIP.sKDGUtU9v18Iop1szIxJhgHaEo&amp;mediaurl=https%3a%2f%2fwallpaperaccess.com%2ffull%2f767033.jpg&amp;exph=1200&amp;expw=1920&amp;q=delicious+food&amp;simid=608024665629790335&amp;FORM=IRPRST&amp;ck=6B3362528C002E303645FFDF2AFFBCC4&amp;selectedIndex=1&amp;itb=0"/>
+</div>
+</section>
+<section class="categories">
+<h2 class="section-title">What's on your mind?</h2>
+<div class="category-cards">
+<div class="category-card" onclick="location.assign('category.html?type=pizza')">
+<img alt="Pizza" src="https://images.unsplash.com/photo-1513104890138-7c749659a591?ixlib=rb-4.0.3&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;auto=format&amp;fit=crop&amp;w=1000&amp;q=80"/>
+<h3>Pizza</h3>
+</div>
+<div class="category-card" onclick="location.assign('category.html?type=burger')">
+<img alt="Burger" src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?ixlib=rb-4.0.3&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;auto=format&amp;fit=crop&amp;w=1000&amp;q=80"/>
+<h3>Burger</h3>
+</div>
+<div class="category-card" onclick="location.assign('category.html?type=biryani')">
+<img alt="Biryani" src="https://images.unsplash.com/photo-1589302168068-964664d93dc0?ixlib=rb-4.0.3&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;auto=format&amp;fit=crop&amp;w=1000&amp;q=80"/>
+<h3>Biryani</h3>
+</div>
+<div class="category-card" onclick="location.assign('category.html?type=chinese')">
+<img alt="Chinese" src="https://images.unsplash.com/photo-1585032226651-759b368d7246?ixlib=rb-4.0.3&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;auto=format&amp;fit=crop&amp;w=1000&amp;q=80"/>
+<h3>Chinese</h3>
+</div>
+<div class="category-card" onclick="return loadFile('category.html')" style="cursor: pointer">
+<img alt="Desserts" src="https://plus.unsplash.com/premium_photo-1671379825277-ee5e906ec9ac?ixlib=rb-4.0.3&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;auto=format&amp;fit=crop&amp;w=1000&amp;q=80"/>
+<h3>Desserts</h3>
+</div>
+</div>
+</section>
+<section class="restaurants">
+<h2 class="section-title">Top Restaurants Near You</h2>
+<div class="restaurant-cards">
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1211547141/photo/modern-restaurant-interior-design.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=CvJmHwNNwfFzVjj1_cX9scwYsl4mnVO8XFPi0LQMTcw="/>
+<div class="restaurant-card-content">
+<h3>Pizza Palace</h3>
+<p>Pizza, Italian, Fast Food</p>
+<p><span class="rating">4.2 ★</span> • 30-40 mins • ₹200 for two</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1307190527/photo/business-people-at-a-restaurant.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=FUVz-FNuNP-ICvsvxXR1B-SaCsXCNq0b-NUEpfgYdGE="/>
+<div class="restaurant-card-content">
+<h3>Burger King</h3>
+<p>Burger, Fast Food, Beverages</p>
+<p><span class="rating">4.3 ★</span> • 25-35 mins • ₹250 for two</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="return loadFile('restaurant.html')" style="cursor: pointer">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1333127665/photo/indian-hindu-veg-thali-food-platter-selective-focus.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=_5Id97_yOH9YMcVOFQ6h3rXmj7BOQgPNM1XfG3GufF8="/>
+<div class="restaurant-card-content">
+<h3>Biryani House</h3>
+<p>Biryani, North Indian, Mughlai</p>
+<p><span class="rating">4.1 ★</span> • 35-45 mins • ₹300 for two</p>
+</div>
+</div>
+<div class="restaurant-card" onclick="location.replace('restaurant.html?id=4')">
+<img alt="Restaurant" src="https://media.istockphoto.com/id/1363169212/photo/table-top-view-of-indian-food.jpg?s=612x612&amp;w=0&amp;k=20&amp;c=lOfGXJj9sqPH9SKgqwgCOYe8YnKBm40QGbgbALW7DT4="/>
+<div class="restaurant-card-content">
+<h3>China Town</h3>
+<p>Chinese, Pan Asian</p>
+<p><span class="rating">4.0 ★</span> • 40-50 mins • ₹400 for two</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<footer>
+<div class="footer-content">
+<div class="footer-column">
+<h3>Company</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('about.html')" style="cursor: pointer">About us</a></li>
+<li><a href="#" onclick="return loadFile('careers.html')" style="cursor: pointer">Careers</a></li>
+<li><a href="#" onclick="return loadFile('blog.html')" style="cursor: pointer">Blog</a></li>
+<li><a href="#" onclick="return loadFile('contact.html')" style="cursor: pointer">Contact</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Legal</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('terms.html')" style="cursor: pointer">Terms &amp; Conditions</a></li>
+<li><a href="#" onclick="return loadFile('privacy.html')" style="cursor: pointer">Privacy Policy</a></li>
+<li><a href="#" onclick="return loadFile('cookies.html')" style="cursor: pointer">Cookies Policy</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Help</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('payments.html')" style="cursor: pointer">Payments</a></li>
+<li><a href="#" onclick="return loadFile('shipping.html')" style="cursor: pointer">Shipping</a></li>
+<li><a href="#" onclick="return loadFile('cancellations.html')" style="cursor: pointer">Cancellations</a></li>
+<li><a href="#" onclick="return loadFile('faq.html')" style="cursor: pointer">FAQ</a></li>
+</ul>
+</div>
+</div>
+<div class="copyright">
+            © 2023 Swiggy Clone - Created for educational purposes
+        </div>
+</footer>
+<script>
+        // Sample inline JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Swiggy Homepage Loaded!');
+            
+            // Animation for hero section
+            const heroText = document.querySelector('.hero-text');
+            heroText.style.opacity = '0';
+            heroText.style.transform = 'translateY(20px)';
+            
+            setTimeout(() => {
+                heroText.style.transition = 'opacity 0.8s ease, transform 0.8s ease';
+                heroText.style.opacity = '1';
+                heroText.style.transform = 'translateY(0)';
+            }, 100);
+        });
+    
+ function loadFile(fileName) {
+            if (window.parent && window.parent.loadFile) {
+                window.parent.loadFile(fileName);
+            } else if (window.opener && !window.opener.closed && window.opener.loadFile) {
+                window.opener.loadFile(fileName);
+            } else {
+                alert('Cannot access client.html. Please make sure this page is opened from client.html');
+            }
+        }
+
+</script>
+</body>
+</html> 

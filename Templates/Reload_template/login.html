@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login | Swiggy</title>
+<style>
+        /* Inline CSS */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
+            background-color: #f8f8f8;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            background-color: white;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo {
+            height: 50px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .nav-links a:hover {
+            color: #fc8019;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 0 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+            text-align: center;
+        }
+        .login-subtitle {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .login-form input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .login-form input:focus {
+            outline: none;
+            border-color: #fc8019;
+        }
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #fc8019;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .login-btn:hover {
+            background-color: #e8741a;
+        }
+        .login-options {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .forgot-password {
+            color: #fc8019;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .forgot-password:hover {
+            text-decoration: underline;
+        }
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+        }
+        .divider-line {
+            flex: 1;
+            height: 1px;
+            background-color: #e0e0e0;
+        }
+        .divider-text {
+            padding: 0 10px;
+            color: #666;
+            font-size: 14px;
+        }
+        .social-login {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .social-btn {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            background-color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .social-btn:hover {
+            background-color: #f5f5f5;
+        }
+        .social-icon {
+            width: 20px;
+            height: 20px;
+        }
+        .signup-link {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+        .signup-link a {
+            color: #fc8019;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .signup-link a:hover {
+            text-decoration: underline;
+        }
+        .error-message {
+            color: #e43b4f;
+            font-size: 14px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        footer {
+            background-color: #f8f8f8;
+            padding: 50px;
+            margin-top: 50px;
+            border-top: 1px solid #e8e8e8;
+        }
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .footer-column {
+            flex: 1;
+        }
+        .footer-column h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .footer-column ul {
+            list-style: none;
+        }
+        .footer-column ul li {
+            margin-bottom: 10px;
+        }
+        .footer-column ul li a {
+            text-decoration: none;
+            color: #666;
+        }
+        .footer-column ul li a:hover {
+            color: #fc8019;
+        }
+        .copyright {
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 14px;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: bold;
+            color: #666;
+        }
+        .tab.active {
+            color: #fc8019;
+            border-bottom: 2px solid #fc8019;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .otp-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .otp-input {
+            flex: 1;
+            width: 40px;
+            height: 40px;
+            text-align: center;
+            font-size: 18px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+<header>
+<img alt="Swiggy Logo" class="logo" src="https://logolook.net/wp-content/uploads/2023/04/Swiggy-Logo.png"/>
+<div class="nav-links">
+<a href="#" onclick="return loadFile('restaurants.html')" style="cursor: pointer">Restaurants</a>
+<a href="#" onclick="return loadFile('offers.html')" style="cursor: pointer">Offers</a>
+<a href="#" onclick="return loadFile('cart.html')" style="cursor: pointer">Cart</a>
+<a href="#" onclick="return loadFile('login.html')" style="cursor: pointer">Sign In</a>
+<a href="#" onclick="return loadFile('help.html')" style="cursor: pointer">Help</a>
+</div>
+</header>
+<main>
+<section class="container">
+<div class="login-container">
+<h1 class="login-title">Login</h1>
+<p class="login-subtitle">Sign in to access your account</p>
+<div class="tabs">
+<div class="tab active" data-tab="login">Login</div>
+<div class="tab" data-tab="signup">Sign Up</div>
+</div>
+<div class="tab-content active" id="login-tab">
+<p class="error-message" id="login-error"></p>
+<form class="login-form" id="login-form">
+<input placeholder="Email or Phone Number" required="" type="email"/>
+<input placeholder="Password" required="" type="password"/>
+<div class="login-options">
+<label class="remember-me">
+<input type="checkbox"/>
+<span>Remember me</span>
+</label>
+<a class="forgot-password" href="#" onclick="showForgotPassword()">Forgot Password?</a>
+</div>
+<button class="login-btn" type="submit">Login</button>
+</form>
+<div class="divider">
+<div class="divider-line"></div>
+<div class="divider-text">OR</div>
+<div class="divider-line"></div>
+</div>
+<div class="social-login">
+<button class="social-btn" onclick="socialLogin('google')">
+<img alt="Google" class="social-icon" src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg"/>
+                            Google
+                        </button>
+<button class="social-btn" onclick="socialLogin('facebook')">
+<img alt="Facebook" class="social-icon" src="https://upload.wikimedia.org/wikipedia/commons/5/51/Facebook_f_logo_%282019%29.svg"/>
+                            Facebook
+                        </button>
+</div>
+</div>
+<div class="tab-content" id="signup-tab">
+<p class="error-message" id="signup-error"></p>
+<form class="login-form" id="signup-form">
+<input placeholder="Full Name" required="" type="text"/>
+<input placeholder="Email" required="" type="email"/>
+<input placeholder="Phone Number" required="" type="tel"/>
+<input placeholder="Password" required="" type="password"/>
+<input placeholder="Confirm Password" required="" type="password"/>
+<button class="login-btn" type="submit">Sign Up</button>
+</form>
+</div>
+<div class="tab-content" id="forgot-password-tab">
+<p>Enter your email address to reset your password.</p>
+<form class="login-form" id="forgot-password-form">
+<input placeholder="Email Address" required="" type="email"/>
+<button class="login-btn" type="submit">Send Reset Link</button>
+</form>
+<p class="signup-link">
+<a href="#" onclick="showLoginTab()">Back to Login</a>
+</p>
+</div>
+<div class="tab-content" id="otp-tab">
+<p>Enter the OTP sent to your email/phone.</p>
+<form class="login-form" id="otp-form">
+<div class="otp-container">
+<input class="otp-input" maxlength="1" required="" type="text"/>
+<input class="otp-input" maxlength="1" required="" type="text"/>
+<input class="otp-input" maxlength="1" required="" type="text"/>
+<input class="otp-input" maxlength="1" required="" type="text"/>
+</div>
+<button class="login-btn" type="submit">Verify OTP</button>
+</form>
+<p class="signup-link">
+                        Didn't receive OTP? <a href="#" onclick="resendOTP()">Resend OTP</a>
+</p>
+</div>
+</div>
+</section>
+</main>
+<footer>
+<div class="footer-content">
+<div class="footer-column">
+<h3>Company</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('about.html')" style="cursor: pointer">About us</a></li>
+<li><a href="#" onclick="return loadFile('careers.html')" style="cursor: pointer">Careers</a></li>
+<li><a href="#" onclick="return loadFile('blog.html')" style="cursor: pointer">Blog</a></li>
+<li><a href="#" onclick="return loadFile('contact.html')" style="cursor: pointer">Contact</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Legal</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('terms.html')" style="cursor: pointer">Terms &amp; Conditions</a></li>
+<li><a href="#" onclick="return loadFile('privacy.html')" style="cursor: pointer">Privacy Policy</a></li>
+<li><a href="#" onclick="return loadFile('cookies.html')" style="cursor: pointer">Cookies Policy</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Help</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('payments.html')" style="cursor: pointer">Payments</a></li>
+<li><a href="#" onclick="return loadFile('shipping.html')" style="cursor: pointer">Shipping</a></li>
+<li><a href="#" onclick="return loadFile('cancellations.html')" style="cursor: pointer">Cancellations</a></li>
+<li><a href="#" onclick="return loadFile('faq.html')" style="cursor: pointer">FAQ</a></li>
+</ul>
+</div>
+</div>
+<div class="copyright">
+            © 2023 Swiggy Clone - Created for educational purposes
+        </div>
+</footer>
+<script>
+        // Sample inline JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Login Page Loaded!');
+            
+            // Tab functionality
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Remove active class from all tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    // Add active class to clicked tab
+                    this.classList.add('active');
+                    
+                    // Hide all tab content
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    
+                    // Show selected tab content
+                    const tabName = this.getAttribute('data-tab');
+                    document.getElementById(tabName + '-tab').classList.add('active');
+                });
+            });
+            
+            // Login form submission
+            document.getElementById('login-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const email = this.querySelector('input[type="email"]').value;
+                const password = this.querySelector('input[type="password"]').value;
+                
+                // Simple validation
+                if (!email || !password) {
+                    document.getElementById('login-error').textContent = 'Please enter both email and password';
+                    document.getElementById('login-error').style.display = 'block';
+                    return;
+                }
+                
+                // Simulate login
+                console.log('Logging in with:', email);
+                
+                // Show OTP verification (simulating login flow)
+                showOTPTab();
+            });
+            
+            // Sign up form submission
+            document.getElementById('signup-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const name = this.querySelector('input[type="text"]').value;
+                const email = this.querySelector('input[type="email"]').value;
+                const phone = this.querySelector('input[type="tel"]').value;
+                const password = this.querySelectorAll('input[type="password"]')[0].value;
+                const confirmPassword = this.querySelectorAll('input[type="password"]')[1].value;
+                
+                // Simple validation
+                if (password !== confirmPassword) {
+                    document.getElementById('signup-error').textContent = 'Passwords do not match';
+                    document.getElementById('signup-error').style.display = 'block';
+                    return;
+                }
+                
+                // Simulate sign up
+                console.log('Signing up with:', name, email, phone);
+                
+                // Show OTP verification
+                showOTPTab();
+            });
+            
+            // Forgot password form submission
+            document.getElementById('forgot-password-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const email = this.querySelector('input[type="email"]').value;
+                
+                // Simulate password reset
+                console.log('Sending password reset to:', email);
+                
+                // Show confirmation
+                alert('Password reset link sent to ' + email);
+                
+                // Go back to login
+                showLoginTab();
+            });
+            
+            // OTP form submission
+            document.getElementById('otp-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                // Get OTP values
+                const otpInputs = this.querySelectorAll('.otp-input');
+                let otp = '';
+                otpInputs.forEach(input => {
+                    otp += input.value;
+                });
+                
+                // Simulate OTP verification
+                console.log('Verifying OTP:', otp);
+                
+                // Redirect to home page on successful login
+                window.location.href = 'index.html';
+            });
+            
+            // OTP input handling
+            const otpInputs = document.querySelectorAll('.otp-input');
+            otpInputs.forEach((input, index) => {
+                input.addEventListener('input', function() {
+                    // Move to next input after entering a digit
+                    if (this.value.length === 1 && index < otpInputs.length - 1) {
+                        otpInputs[index + 1].focus();
+                    }
+                });
+                
+                input.addEventListener('keydown', function(e) {
+                    // Move to previous input on backspace
+                    if (e.key === 'Backspace' && index > 0 && this.value.length === 0) {
+                        otpInputs[index - 1].focus();
+                    }
+                });
+            });
+        });
+        
+        // Function to show forgot password tab
+        function showForgotPassword() {
+            // Hide all tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Show forgot password tab
+            document.getElementById('forgot-password-tab').classList.add('active');
+        }
+        
+        // Function to show login tab
+        function showLoginTab() {
+            // Hide all tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Show login tab
+            document.getElementById('login-tab').classList.add('active');
+            
+            // Update tab selection
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector('.tab[data-tab="login"]').classList.add('active');
+        }
+        
+        // Function to show OTP tab
+        function showOTPTab() {
+            // Hide all tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Show OTP tab
+            document.getElementById('otp-tab').classList.add('active');
+        }
+        
+        // Function to handle social login
+        function socialLogin(provider) {
+            console.log('Logging in with', provider);
+            
+            // Simulate social login
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 1000);
+        }
+        
+        // Function to resend OTP
+        function resendOTP() {
+            console.log('Resending OTP');
+            alert('OTP has been resent to your email/phone');
+        }
+    
+ function loadFile(fileName) {
+            if (window.parent && window.parent.loadFile) {
+                window.parent.loadFile(fileName);
+            } else if (window.opener && !window.opener.closed && window.opener.loadFile) {
+                window.opener.loadFile(fileName);
+            } else {
+                alert('Cannot access client.html. Please make sure this page is opened from client.html');
+            }
+        }
+
+</script>
+</body>
+</html> 

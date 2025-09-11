@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Your Cart | Swiggy</title>
+<style>
+        /* Inline CSS */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
+            background-color: #f8f8f8;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            background-color: white;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo {
+            height: 50px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .nav-links a:hover {
+            color: #fc8019;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 50px;
+            display: flex;
+            gap: 30px;
+        }
+        .page-title {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .cart-container {
+            flex: 2;
+        }
+        .summary-container {
+            flex: 1;
+        }
+        .cart-items {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .cart-item {
+            display: flex;
+            padding: 15px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .cart-item:last-child {
+            border-bottom: none;
+        }
+        .item-info {
+            flex: 3;
+        }
+        .item-actions {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+        }
+        .item-name {
+            font-size: 18px;
+            margin-bottom: 5px;
+            color: #333;
+            display: flex;
+            align-items: center;
+        }
+        .item-price {
+            font-size: 16px;
+            color: #333;
+        }
+        .quantity-control {
+            display: flex;
+            align-items: center;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .quantity-btn {
+            width: 30px;
+            height: 30px;
+            background-color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .quantity-btn:hover {
+            background-color: #f5f5f5;
+        }
+        .quantity-input {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-left: 1px solid #e0e0e0;
+            border-right: 1px solid #e0e0e0;
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .remove-btn {
+            margin-left: 15px;
+            color: #fc8019;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: underline;
+        }
+        .empty-cart {
+            text-align: center;
+            padding: 50px 0;
+        }
+        .empty-cart img {
+            width: 200px;
+            margin-bottom: 20px;
+        }
+        .empty-cart h2 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .empty-cart p {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        .browse-btn {
+            padding: 12px 24px;
+            background-color: #fc8019;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .browse-btn:hover {
+            background-color: #e8741a;
+        }
+        .order-summary {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            position: sticky;
+            top: 90px;
+        }
+        .summary-title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .summary-line {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #333;
+        }
+        .total-line {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed #e0e0e0;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .checkout-btn {
+            width: 100%;
+            padding: 15px;
+            background-color: #60b246;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        .checkout-btn:hover {
+            background-color: #4e9a39;
+        }
+        .offers {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .offer-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .offer-title svg {
+            color: #fc8019;
+        }
+        .offer-code {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 1px dashed #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .offer-code-text {
+            font-weight: bold;
+            color: #333;
+        }
+        .offer-description {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .apply-btn {
+            padding: 8px 16px;
+            background-color: #f0f0f0;
+            color: #333;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin-left: auto;
+        }
+        .apply-btn:hover {
+            background-color: #e0e0e0;
+        }
+        .delivery-address {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .address-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .address-title svg {
+            color: #fc8019;
+        }
+        .address-form input, .address-form select, .address-form textarea {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .address-form textarea {
+            height: 80px;
+            resize: none;
+        }
+        .save-address-btn {
+            width: 100%;
+            padding: 12px;
+            background-color: #fc8019;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .save-address-btn:hover {
+            background-color: #e8741a;
+        }
+        .payment-methods {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            padding: 20px;
+        }
+        .payment-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .payment-title svg {
+            color: #fc8019;
+        }
+        .payment-option {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .payment-option:hover {
+            background-color: #f8f8f8;
+        }
+        .payment-option input[type="radio"] {
+            margin-right: 15px;
+        }
+        .payment-option-label {
+            font-weight: bold;
+            color: #333;
+        }
+        .veg-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 1px solid #60b246;
+            border-radius: 2px;
+            margin-right: 8px;
+            position: relative;
+        }
+        .veg-indicator::after {
+            content: "";
+            width: 6px;
+            height: 6px;
+            background-color: #60b246;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .non-veg-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 1px solid #e43b4f;
+            border-radius: 2px;
+            margin-right: 8px;
+            position: relative;
+        }
+        .non-veg-indicator::after {
+            content: "";
+            width: 6px;
+            height: 6px;
+            background-color: #e43b4f;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        footer {
+            background-color: #f8f8f8;
+            padding: 50px;
+            margin-top: 50px;
+            border-top: 1px solid #e8e8e8;
+        }
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .footer-column {
+            flex: 1;
+        }
+        .footer-column h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .footer-column ul {
+            list-style: none;
+        }
+        .footer-column ul li {
+            margin-bottom: 10px;
+        }
+        .footer-column ul li a {
+            text-decoration: none;
+            color: #666;
+        }
+        .footer-column ul li a:hover {
+            color: #fc8019;
+        }
+        .copyright {
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 14px;
+        }
+        @media screen and (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                padding: 0 20px;
+            }
+            .header {
+                padding: 20px;
+            }
+            .nav-links {
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+<header>
+<img alt="Swiggy Logo" class="logo" src="https://logolook.net/wp-content/uploads/2023/04/Swiggy-Logo.png"/>
+<div class="nav-links">
+<a href="#" onclick="return loadFile('restaurants.html')" style="cursor: pointer">Restaurants</a>
+<a href="#" onclick="return loadFile('offers.html')" style="cursor: pointer">Offers</a>
+<a href="#" onclick="return loadFile('cart.html')" style="cursor: pointer">Cart</a>
+<a href="#" onclick="return loadFile('login.html')" style="cursor: pointer">Sign In</a>
+<a href="#" onclick="return loadFile('help.html')" style="cursor: pointer">Help</a>
+<a href="#" onclick="return loadFile('category.html')" style="cursor: pointer">category</a>
+</div>
+</header>
+<main>
+<section class="container">
+<div class="cart-container">
+<h1 class="page-title">Your Cart</h1>
+<div class="cart-items" id="cart-items">
+<!-- Cart items will be loaded here via JavaScript -->
+</div>
+<div class="delivery-address">
+<h2 class="address-title">
+<svg fill="currentColor" height="18" viewbox="0 0 16 16" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"></path>
+</svg>
+                        Delivery Address
+                    </h2>
+<form class="address-form">
+<input placeholder="Full Name" required="" type="text"/>
+<input placeholder="Phone Number" required="" type="text"/>
+<input placeholder="House/Flat No., Building Name" required="" type="text"/>
+<input placeholder="Street, Area" required="" type="text"/>
+<input placeholder="Landmark (Optional)" type="text"/>
+<input placeholder="Pincode" required="" type="text"/>
+<select required="">
+<option disabled="" selected="" value="">Select Address Type</option>
+<option value="home">Home</option>
+<option value="work">Work</option>
+<option value="other">Other</option>
+</select>
+<button class="save-address-btn" type="submit">Save Address</button>
+</form>
+</div>
+<div class="payment-methods">
+<h2 class="payment-title">
+<svg fill="currentColor" height="18" viewbox="0 0 16 16" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V4zm2-1a1 1 0 0 0-1 1v1h14V4a1 1 0 0 0-1-1H2zm13 4H1v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7z"></path>
+<path d="M2 10a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1z"></path>
+</svg>
+                        Payment Methods
+                    </h2>
+<div class="payment-option">
+<input id="upi" name="payment-method" type="radio" value="upi"/>
+<label class="payment-option-label" for="upi">UPI</label>
+</div>
+<div class="payment-option">
+<input id="card" name="payment-method" type="radio" value="card"/>
+<label class="payment-option-label" for="card">Credit/Debit Card</label>
+</div>
+<div class="payment-option">
+<input id="netbanking" name="payment-method" type="radio" value="netbanking"/>
+<label class="payment-option-label" for="netbanking">Net Banking</label>
+</div>
+<div class="payment-option">
+<input id="wallet" name="payment-method" type="radio" value="wallet"/>
+<label class="payment-option-label" for="wallet">Wallet</label>
+</div>
+<div class="payment-option">
+<input checked="" id="cod" name="payment-method" type="radio" value="cod"/>
+<label class="payment-option-label" for="cod">Cash on Delivery</label>
+</div>
+</div>
+</div>
+<div class="summary-container">
+<div class="offers">
+<h2 class="offer-title">
+<svg fill="currentColor" height="18" viewbox="0 0 16 16" width="18" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 0c-.69 0-1.843.265-2.928.56-1.11.3-2.229.655-2.887.87a1.54 1.54 0 0 0-1.044 1.262c-.596 4.477.787 7.795 2.465 9.99a11.777 11.777 0 0 0 2.517 2.453c.386.273.744.482 1.048.625.28.132.581.24.829.24s.548-.108.829-.24a7.159 7.159 0 0 0 1.048-.625 11.775 11.775 0 0 0 2.517-2.453c1.678-2.195 3.061-5.513 2.465-9.99a1.54 1.54 0 0 0-1.044-1.263 62.467 62.467 0 0 0-2.887-.87C9.843.266 8.69 0 8 0zm0 5a1.5 1.5 0 0 1 1.5 1.5A1.5 1.5 0 0 1 9.5 8 1.5 1.5 0 0 1 8 9.5 1.5 1.5 0 0 1 6.5 8 1.5 1.5 0 0 1 8 6.5zm4-3a2 2 0 1 1 0 4 2 2 0 0 1 0-4z" fill-rule="evenodd"></path>
+</svg>
+                        Available Offers
+                    </h2>
+<div class="offer-code">
+<div>
+<span class="offer-code-text">WELCOME50</span>
+<p class="offer-description">50% off up to ₹100 on your first order</p>
+</div>
+<button class="apply-btn">Apply</button>
+</div>
+<div class="offer-code">
+<div>
+<span class="offer-code-text">FREEDEL</span>
+<p class="offer-description">Free delivery on orders above ₹400</p>
+</div>
+<button class="apply-btn">Apply</button>
+</div>
+</div>
+<div class="order-summary" id="order-summary">
+<h2 class="summary-title">Order Summary</h2>
+<div id="summary-items">
+<!-- Summary items will be loaded here via JavaScript -->
+</div>
+<div class="summary-line">
+<span>Subtotal</span>
+<span id="subtotal">₹0</span>
+</div>
+<div class="summary-line">
+<span>Delivery Fee</span>
+<span id="delivery-fee">₹0</span>
+</div>
+<div class="summary-line">
+<span>GST and Restaurant Charges</span>
+<span id="taxes">₹0</span>
+</div>
+<div class="total-line">
+<span>To Pay</span>
+<span id="total">₹0</span>
+</div>
+<button class="checkout-btn" id="checkout-btn" onclick="return loadFile('checkout-success.html')" style="cursor: pointer">Proceed to Pay</button>
+</div>
+</div>
+</section>
+</main>
+<footer>
+<div class="footer-content">
+<div class="footer-column">
+<h3>Company</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('about.html')" style="cursor: pointer">About us</a></li>
+<li><a href="#" onclick="return loadFile('careers.html')" style="cursor: pointer">Careers</a></li>
+<li><a href="#" onclick="return loadFile('blog.html')" style="cursor: pointer">Blog</a></li>
+<li><a href="#" onclick="return loadFile('contact.html')" style="cursor: pointer">Contact</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Legal</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('terms.html')" style="cursor: pointer">Terms &amp; Conditions</a></li>
+<li><a href="#" onclick="return loadFile('privacy.html')" style="cursor: pointer">Privacy Policy</a></li>
+<li><a href="#" onclick="return loadFile('cookies.html')" style="cursor: pointer">Cookies Policy</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Help</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('payments.html')" style="cursor: pointer">Payments</a></li>
+<li><a href="#" onclick="return loadFile('shipping.html')" style="cursor: pointer">Shipping</a></li>
+<li><a href="#" onclick="return loadFile('cancellations.html')" style="cursor: pointer">Cancellations</a></li>
+<li><a href="#" onclick="return loadFile('faq.html')" style="cursor: pointer">FAQ</a></li>
+</ul>
+</div>
+</div>
+<div class="copyright">
+            © 2023 Swiggy Clone - Created for educational purposes
+        </div>
+</footer>
+<script>
+        // Sample inline JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Cart Page Loaded!');
+            
+            // Load cart from localStorage
+            let cart = [];
+            if (localStorage.getItem('swiggyCart')) {
+                cart = JSON.parse(localStorage.getItem('swiggyCart'));
+            }
+            
+            // Update cart UI
+            updateCartUI(cart);
+            
+            // Update summary UI
+            updateSummaryUI(cart);
+            
+            // Add event listeners to address form
+            document.querySelector('.address-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                alert('Address saved successfully!');
+            });
+            
+            // Add event listeners to payment options
+            document.querySelectorAll('.payment-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    const radio = this.querySelector('input[type="radio"]');
+                    radio.checked = true;
+                });
+            });
+            
+            // Add event listeners to offer buttons
+            document.querySelectorAll('.apply-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const offerCode = this.parentElement.querySelector('.offer-code-text').textContent;
+                    alert(`Offer ${offerCode} applied successfully!`);
+                    this.textContent = 'Applied';
+                    this.disabled = true;
+                    this.style.backgroundColor = '#e0e0e0';
+                    this.style.cursor = 'not-allowed';
+                    
+                    // In a real application, we would recalculate the summary here
+                    // For this demo, let's just update the total
+                    const total = document.getElementById('total');
+                    const currentTotal = parseInt(total.textContent.replace('₹', ''));
+                    const discount = Math.min(100, Math.round(currentTotal * 0.5));
+                    total.textContent = `₹${currentTotal - discount}`;
+                    
+                    // Add a discount line to the summary
+                    const summaryItems = document.getElementById('summary-items');
+                    const discountLine = document.createElement('div');
+                    discountLine.className = 'summary-line';
+                    discountLine.innerHTML = `<span style="color: #60b246;">Discount (${offerCode})</span><span style="color: #60b246;">-₹${discount}</span>`;
+                    
+                    // Insert before the subtotal
+                    const subtotalLine = document.querySelector('.summary-line');
+                    summaryItems.parentNode.insertBefore(discountLine, subtotalLine);
+                });
+            });
+        });
+        
+        // Function to update cart UI
+        function updateCartUI(cart) {
+            const cartItemsContainer = document.getElementById('cart-items');
+            
+            // Clear cart items
+            cartItemsContainer.innerHTML = '';
+            
+            // Check if cart is empty
+            if (!cart || cart.length === 0) {
+                cartItemsContainer.innerHTML = `
+                    <div class="empty-cart">
+                        <img src="https://res.cloudinary.com/swiggy/image/upload/fl_lossy,f_auto,q_auto/2xempty_cart_yfxml0" alt="Empty Cart">
+                        <h2>Your cart is empty</h2>
+                        <p>You can go to home page to view more restaurants</p>
+                        <button class="browse-btn" onclick="window.location.href='index.html'">Browse Restaurants</button>
+                    </div>
+                `;
+                
+                // Hide the address and payment sections
+                document.querySelector('.delivery-address').style.display = 'none';
+                document.querySelector('.payment-methods').style.display = 'none';
+                
+                return;
+            }
+            
+            // Display cart items
+            cart.forEach((item, index) => {
+                const cartItem = document.createElement('div');
+                cartItem.className = 'cart-item';
+                
+                // Determine if item is veg or non-veg
+                const isVeg = !item.name.toLowerCase().includes('chicken') && 
+                             !item.name.toLowerCase().includes('mutton') && 
+                             !item.name.toLowerCase().includes('eden') && 
+                             !item.name.toLowerCase().includes('fish');
+                
+                const itemIndicator = isVeg ? '<span class="veg-indicator"></span>' : '<span class="non-veg-indicator"></span>';
+                
+                cartItem.innerHTML = `
+                    <div class="item-info">
+                        <h3 class="item-name">${itemIndicator} ${item.name}</h3>
+                        <p class="item-price">₹${item.price}</p>
+                    </div>
+                    <div class="item-actions">
+                        <div class="quantity-control">
+                            <button class="quantity-btn" onclick="changeQuantity(${index}, -1)">-</button>
+                            <input type="text" class="quantity-input" value="${item.quantity || 1}" readonly>
+                            <button class="quantity-btn" onclick="changeQuantity(${index}, 1)">+</button>
+                        </div>
+                        <span class="remove-btn" onclick="removeItem(${index})">Remove</span>
+                    </div>
+                `;
+                
+                cartItemsContainer.appendChild(cartItem);
+            });
+        }
+        
+        // Function to update summary UI
+        function updateSummaryUI(cart) {
+            const summaryItemsContainer = document.getElementById('summary-items');
+            const subtotal = document.getElementById('subtotal');
+            const deliveryFee = document.getElementById('delivery-fee');
+            const taxes = document.getElementById('taxes');
+            const total = document.getElementById('total');
+            
+            // Clear summary items
+            summaryItemsContainer.innerHTML = '';
+            
+            // Calculate totals
+            let subtotalValue = 0;
+            let taxValue = 0;
+            let deliveryFeeValue = 30; // Default delivery fee
+            
+            // Check if cart is empty
+            if (!cart || cart.length === 0) {
+                subtotalValue = 0;
+                taxValue = 0;
+                deliveryFeeValue = 0;
+            } else {
+                // Calculate subtotal
+                cart.forEach(item => {
+                    subtotalValue += item.price * (item.quantity || 1);
+                });
+                
+                // Calculate taxes (5% of subtotal)
+                taxValue = Math.round(subtotalValue * 0.05);
+                
+                // Free delivery if subtotal is above 400
+                if (subtotalValue >= 400) {
+                    deliveryFeeValue = 0;
+                }
+            }
+            
+            // Calculate total
+            const totalValue = subtotalValue + taxValue + deliveryFeeValue;
+            
+            // Update UI
+            subtotal.textContent = `₹${subtotalValue}`;
+            taxes.textContent = `₹${taxValue}`;
+            deliveryFee.textContent = deliveryFeeValue === 0 ? 'FREE' : `₹${deliveryFeeValue}`;
+            total.textContent = `₹${totalValue}`;
+            
+            // Disable checkout button if cart is empty
+            if (cart.length === 0) {
+                document.getElementById('checkout-btn').disabled = true;
+                document.getElementById('checkout-btn').style.backgroundColor = '#ccc';
+                document.getElementById('checkout-btn').style.cursor = 'not-allowed';
+            }
+        }
+        
+        // Function to change item quantity
+        function changeQuantity(index, change) {
+            // Get cart from localStorage
+            let cart = localStorage.getItem('swiggyCart') ? JSON.parse(localStorage.getItem('swiggyCart')) : [];
+            
+            // Get current quantity or default to 1
+            const currentQuantity = cart[index].quantity || 1;
+            
+            // Calculate new quantity
+            const newQuantity = Math.max(1, currentQuantity + change);
+            
+            // Update quantity
+            cart[index].quantity = newQuantity;
+            
+            // Save cart to localStorage
+            localStorage.setItem('swiggyCart', JSON.stringify(cart));
+            
+            // Update UI
+            updateCartUI(cart);
+            updateSummaryUI(cart);
+        }
+        
+        // Function to remove item
+        function removeItem(index) {
+            // Get cart from localStorage
+            let cart = localStorage.getItem('swiggyCart') ? JSON.parse(localStorage.getItem('swiggyCart')) : [];
+            
+            // Remove item at specified index
+            cart.splice(index, 1);
+            
+            // Save cart to localStorage
+            localStorage.setItem('swiggyCart', JSON.stringify(cart));
+            
+            // Update UI
+            updateCartUI(cart);
+            updateSummaryUI(cart);
+        }
+    
+ function loadFile(fileName) {
+            if (window.parent && window.parent.loadFile) {
+                window.parent.loadFile(fileName);
+            } else if (window.opener && !window.opener.closed && window.opener.loadFile) {
+                window.opener.loadFile(fileName);
+            } else {
+                alert('Cannot access client.html. Please make sure this page is opened from client.html');
+            }
+        }
+
+</script>
+</body>
+</html> 

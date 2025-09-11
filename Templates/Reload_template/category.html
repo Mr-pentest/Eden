@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Food Category | Swiggy</title>
+<style>
+        /* Inline CSS */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        body {
+            background-color: #f8f8f8;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 50px;
+            background-color: white;
+            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo {
+            height: 50px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 30px;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .nav-links a:hover {
+            color: #fc8019;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 50px;
+        }
+        .category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .category-title {
+            font-size: 32px;
+            color: #333;
+        }
+        .category-subtitle {
+            font-size: 18px;
+            color: #666;
+            margin-top: 10px;
+        }
+        .back-button {
+            padding: 10px 15px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .back-button:hover {
+            background-color: #f5f5f5;
+        }
+        .filter-section {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .filter-options {
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        .filter-option {
+            padding: 8px 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 20px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .filter-option.active {
+            background-color: #fc8019;
+            color: white;
+            border-color: #fc8019;
+        }
+        .search-bar {
+            display: flex;
+            padding: 10px 0;
+            margin: 20px 0;
+        }
+        .search-bar input {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px 0 0 5px;
+            outline: none;
+        }
+        .search-btn {
+            padding: 12px 25px;
+            background-color: #fc8019;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 0 5px 5px 0;
+            cursor: pointer;
+        }
+        .restaurant-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 30px;
+        }
+        .restaurant-card {
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+        .restaurant-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .restaurant-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+        .restaurant-card-content {
+            padding: 15px;
+        }
+        .restaurant-card-content h3 {
+            font-size: 18px;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .restaurant-card-content p {
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .rating {
+            color: white;
+            background-color: #48c479;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .discount {
+            color: #8a584b;
+            border: 1px solid #e2c0bb;
+            background-color: #ffeaef;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 40px;
+        }
+        .pagination button {
+            padding: 8px 15px;
+            border: 1px solid #e0e0e0;
+            background-color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .pagination button.active {
+            background-color: #fc8019;
+            color: white;
+            border-color: #fc8019;
+        }
+        footer {
+            background-color: #f8f8f8;
+            padding: 50px;
+            margin-top: 50px;
+            border-top: 1px solid #e8e8e8;
+        }
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .footer-column {
+            flex: 1;
+        }
+        .footer-column h3 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .footer-column ul {
+            list-style: none;
+        }
+        .footer-column ul li {
+            margin-bottom: 10px;
+        }
+        .footer-column ul li a {
+            text-decoration: none;
+            color: #666;
+        }
+        .footer-column ul li a:hover {
+            color: #fc8019;
+        }
+        .copyright {
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 14px;
+        }
+        .banner {
+            width: 100%;
+            height: 200px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+        .banner img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+        }
+        .banner-content {
+            position: absolute;
+            color: white;
+            text-align: center;
+            z-index: 1;
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+        }
+        .banner-content h2 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .banner-content p {
+            font-size: 16px;
+            max-width: 500px;
+        }
+    </style>
+</head>
+<body>
+<header>
+<img alt="Swiggy Logo" class="logo" src="https://logolook.net/wp-content/uploads/2023/04/Swiggy-Logo.png"/>
+<div class="nav-links">
+<a href="#" onclick="return loadFile('restaurants.html')" style="cursor: pointer">Restaurants</a>
+<a href="#" onclick="return loadFile('offers.html')" style="cursor: pointer">Offers</a>
+<a href="#" onclick="return loadFile('cart.html')" style="cursor: pointer">Cart</a>
+<a href="#" onclick="return loadFile('login.html')" style="cursor: pointer">Sign In</a>
+<a href="#" onclick="return loadFile('help.html')" style="cursor: pointer">Help</a>
+<a href="#" onclick="return loadFile('category.html')" style="cursor: pointer">category</a>
+</div>
+</header>
+<main>
+<section class="container">
+<div class="category-header">
+<div>
+<h1 class="category-title" id="category-title">Category Name</h1>
+<p class="category-subtitle" id="category-subtitle">Restaurants serving this category</p>
+</div>
+<button class="back-button" onclick="javascript:history.back()">
+<svg fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg">
+<path d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"></path>
+</svg>
+                    Back
+                </button>
+</div>
+<div class="banner" id="category-banner">
+<img alt="Category Banner" src="https://images.unsplash.com/photo-1513104890138-7c749659a591?ixlib=rb-4.0.3&amp;ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&amp;auto=format&amp;fit=crop&amp;w=1000&amp;q=80"/>
+<div class="banner-content">
+<h2 id="banner-title">Delicious Food</h2>
+<p id="banner-description">Discover the best restaurants serving this cuisine near you.</p>
+</div>
+</div>
+<div class="filter-section">
+<div class="filter-options">
+<div class="filter-option active">All</div>
+<div class="filter-option">Fastest Delivery</div>
+<div class="filter-option">Ratings 4.0+</div>
+<div class="filter-option">Pure Veg</div>
+<div class="filter-option">Offers</div>
+</div>
+<div class="search-bar">
+<input placeholder="Search for restaurants..." type="text"/>
+<button class="search-btn">Search</button>
+</div>
+</div>
+<div class="restaurant-grid" id="restaurant-grid">
+<!-- Restaurants will be populated dynamically based on category -->
+</div>
+<div class="pagination">
+<button class="active">1</button>
+<button>2</button>
+<button>3</button>
+<button>Next</button>
+</div>
+</section>
+</main>
+<footer>
+<div class="footer-content">
+<div class="footer-column">
+<h3>Company</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('about.html')" style="cursor: pointer">About us</a></li>
+<li><a href="#" onclick="return loadFile('careers.html')" style="cursor: pointer">Careers</a></li>
+<li><a href="#" onclick="return loadFile('blog.html')" style="cursor: pointer">Blog</a></li>
+<li><a href="#" onclick="return loadFile('contact.html')" style="cursor: pointer">Contact</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Legal</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('terms.html')" style="cursor: pointer">Terms &amp; Conditions</a></li>
+<li><a href="#" onclick="return loadFile('privacy.html')" style="cursor: pointer">Privacy Policy</a></li>
+<li><a href="#" onclick="return loadFile('cookies.html')" style="cursor: pointer">Cookies Policy</a></li>
+</ul>
+</div>
+<div class="footer-column">
+<h3>Help</h3>
+<ul>
+<li><a href="#" onclick="return loadFile('payments.html')" style="cursor: pointer">Payments</a></li>
+<li><a href="#" onclick="return loadFile('shipping.html')" style="cursor: pointer">Shipping</a></li>
+<li><a href="#" onclick="return loadFile('cancellations.html')" style="cursor: pointer">Cancellations</a></li>
+<li><a href="#" onclick="return loadFile('faq.html')" style="cursor: pointer">FAQ</a></li>
+</ul>
+</div>
+</div>
+<div class="copyright">
+            © 2023 Swiggy Clone - Created for educational purposes
+        </div>
+</footer>
+<script>
+        // Sample inline JavaScript
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Category Page Loaded!');
+            
+            // Get category type from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const categoryType = urlParams.get('type');
+            
+            // Update page based on category
+            updateCategoryPage(categoryType);
+            
+            // Filter functionality
+            const filters = document.querySelectorAll('.filter-option');
+            filters.forEach(filter => {
+                filter.addEventListener('click', function() {
+                    // Remove active class from all filters
+                    filters.forEach(f => f.classList.remove('active'));
+                    // Add active class to clicked filter
+                    this.classList.add('active');
+                    
+                    // In a real application, we would filter the restaurants here
+                    console.log('Filter selected:', this.textContent);
+                });
+            });
+            
+            // Search functionality
+            const searchBtn = document.querySelector('.search-btn');
+            const searchInput = document.querySelector('.search-bar input');
+            
+            searchBtn.addEventListener('click', function() {
+                const searchTerm = searchInput.value.trim();
+                if (searchTerm) {
+                    console.log('Searching for:', searchTerm);
+                    // In a real application, we would search the restaurants here
+                    alert('Searching for: ' + searchTerm);
+                }
+            });
+        });
+        
+        // Function to update page based on category
+        function updateCategoryPage(categoryType) {
+            // Default category info
+            let categoryInfo = {
+                title: 'All Categories',
+                subtitle: 'Explore all restaurants',
+                bannerImage: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+                bannerTitle: 'Delicious Food',
+                bannerDescription: 'Discover the best restaurants serving this cuisine near you.',
+                restaurants: []
+            };
+            
+            // Update based on category type
+            if (categoryType) {
+                switch(categoryType.toLowerCase()) {
+                    case 'pizza':
+                        categoryInfo = {
+                            title: 'Pizza',
+                            subtitle: 'Restaurants serving the best pizzas',
+                            bannerImage: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+                            bannerTitle: 'Pizza Paradise',
+                            bannerDescription: 'Cheesy, delicious pizzas with your favorite toppings. Order now!',
+                            restaurants: [
+                                {
+                                    id: 1,
+                                    name: 'Pizza Palace',
+                                    cuisine: 'Pizza, Italian, Fast Food',
+                                    image: 'https://media.istockphoto.com/id/1211547141/photo/modern-restaurant-interior-design.jpg?s=612x612&w=0&k=20&c=CvJmHwNNwfFzVjj1_cX9scwYsl4mnVO8XFPi0LQMTcw=',
+                                    rating: '4.2',
+                                    deliveryTime: '30-40 mins',
+                                    price: '₹200 for two',
+                                    discount: '50% OFF'
+                                },
+                                {
+                                    id: 6,
+                                    name: 'Pasta Palace',
+                                    cuisine: 'Italian, Pasta, Pizza',
+                                    image: 'https://media.istockphoto.com/id/1341564305/photo/italian-pasta-on-a-dark-plate.jpg?s=612x612&w=0&k=20&c=HVR5Z_4Gx8sHs1HbU9oAhQ-GZLZh-XpnnkFNerfcFSs=',
+                                    rating: '4.1',
+                                    deliveryTime: '40-50 mins',
+                                    price: '₹450 for two',
+                                    discount: '25% OFF'
+                                }
+                            ]
+                        };
+                        break;
+                    case 'burger':
+                        categoryInfo = {
+                            title: 'Burger',
+                            subtitle: 'Restaurants serving the juiciest burgers',
+                            bannerImage: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+                            bannerTitle: 'Burger Bonanza',
+                            bannerDescription: 'Juicy, flavorful burgers just a click away. Order now!',
+                            restaurants: [
+                                {
+                                    id: 2,
+                                    name: 'Burger King',
+                                    cuisine: 'Burger, Fast Food, Beverages',
+                                    image: 'https://media.istockphoto.com/id/1307190527/photo/business-people-at-a-restaurant.jpg?s=612x612&w=0&k=20&c=FUVz-FNuNP-ICvsvxXR1B-SaCsXCNq0b-NUEpfgYdGE=',
+                                    rating: '4.3',
+                                    deliveryTime: '25-35 mins',
+                                    price: '₹250 for two',
+                                    discount: '30% OFF'
+                                },
+                                {
+                                    id: 7,
+                                    name: 'KFC',
+                                    cuisine: 'Chicken, Fast Food, Burgers',
+                                    image: 'https://media.istockphoto.com/id/1362209407/photo/homemade-southern-style-fried-chicken.jpg?s=612x612&w=0&k=20&c=lyEo_vRj-WYhzCvZk717SYFg1DXpEVl4Pb9JCJqw1SA=',
+                                    rating: '4.0',
+                                    deliveryTime: '30-40 mins',
+                                    price: '₹300 for two',
+                                    discount: '15% OFF'
+                                }
+                            ]
+                        };
+                        break;
+                    case 'biryani':
+                        categoryInfo = {
+                            title: 'Biryani',
+                            subtitle: 'Restaurants serving the most aromatic biryanis',
+                            bannerImage: 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+                            bannerTitle: 'Biryani Bliss',
+                            bannerDescription: 'Fragrant and flavorful biryanis to satisfy your cravings. Order now!',
+                            restaurants: [
+                                {
+                                    id: 3,
+                                    name: 'Biryani House',
+                                    cuisine: 'Biryani, North Indian, Mughlai',
+                                    image: 'https://media.istockphoto.com/id/1333127665/photo/indian-hindu-veg-thali-food-platter-selective-focus.jpg?s=612x612&w=0&k=20&c=_5Id97_yOH9YMcVOFQ6h3rXmj7BOQgPNM1XfG3GufF8=',
+                                    rating: '4.1',
+                                    deliveryTime: '35-45 mins',
+                                    price: '₹300 for two',
+                                    discount: '40% OFF'
+                                },
+                                {
+                                    id: 5,
+                                    name: 'Curry House',
+                                    cuisine: 'Indian, Curry, Biryani',
+                                    image: 'https://media.istockphoto.com/id/1179922823/photo/indian-food-or-indian-curry-in-a-copper-brass-serving-bowl-with-bread-or-roti.jpg?s=612x612&w=0&k=20&c=mzXZZLLIw4O3OkdvKWQyfoYVMXM27xZ5Du8laCiFPdo=',
+                                    rating: '4.4',
+                                    deliveryTime: '25-35 mins',
+                                    price: '₹350 for two',
+                                    discount: '45% OFF'
+                                }
+                            ]
+                        };
+                        break;
+                    case 'chinese':
+                        categoryInfo = {
+                            title: 'Chinese',
+                            subtitle: 'Restaurants serving authentic Chinese cuisine',
+                            bannerImage: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+                            bannerTitle: 'Chinese Cuisine',
+                            bannerDescription: 'Authentic Chinese dishes ready to be delivered to your doorstep. Order now!',
+                            restaurants: [
+                                {
+                                    id: 4,
+                                    name: 'China Town',
+                                    cuisine: 'Chinese, Pan Asian',
+                                    image: 'https://media.istockphoto.com/id/1363169212/photo/table-top-view-of-indian-food.jpg?s=612x612&w=0&k=20&c=lOfGXJj9sqPH9SKgqwgCOYe8YnKBm40QGbgbALW7DT4=',
+                                    rating: '4.0',
+                                    deliveryTime: '40-50 mins',
+                                    price: '₹400 for two',
+                                    discount: '20% OFF'
+                                }
+                            ]
+                        };
+                        break;
+                    case 'dessert':
+                        categoryInfo = {
+                            title: 'Desserts',
+                            subtitle: 'Restaurants serving the sweetest desserts',
+                            bannerImage: 'https://plus.unsplash.com/premium_photo-1671379825277-ee5e906ec9ac?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+                            bannerTitle: 'Dessert Delights',
+                            bannerDescription: 'Sweet treats to satisfy your cravings. Order now!',
+                            restaurants: [
+                                {
+                                    id: 8,
+                                    name: 'Green Leaf',
+                                    cuisine: 'Healthy, Vegan, Desserts',
+                                    image: 'https://media.istockphoto.com/id/1157503048/photo/falafel-hummus-chickpea-curry-with-vegetables-pumpkin-paprika-tomatoes-spinach-top-view.jpg?s=612x612&w=0&k=20&c=rDmPz6-OVkjmDeh5RX7DXzwK-QeNEu9RtimfhRVuJ6g=',
+                                    rating: '4.5',
+                                    deliveryTime: '25-35 mins',
+                                    price: '₹250 for two',
+                                    discount: '35% OFF'
+                                }
+                            ]
+                        };
+                        break;
+                    default:
+                        // Use default values
+                        break;
+                }
+            }
+            
+            // Update page title
+            document.title = categoryInfo.title + ' | Swiggy';
+            
+            // Update category header
+            document.getElementById('category-title').textContent = categoryInfo.title;
+            document.getElementById('category-subtitle').textContent = categoryInfo.subtitle;
+            
+            // Update banner
+            document.getElementById('category-banner').querySelector('img').src = categoryInfo.bannerImage;
+            document.getElementById('banner-title').textContent = categoryInfo.bannerTitle;
+            document.getElementById('banner-description').textContent = categoryInfo.bannerDescription;
+            
+            // Update restaurant grid
+            const restaurantGrid = document.getElementById('restaurant-grid');
+            restaurantGrid.innerHTML = '';
+            
+            if (categoryInfo.restaurants && categoryInfo.restaurants.length > 0) {
+                categoryInfo.restaurants.forEach(restaurant => {
+                    const restaurantCard = document.createElement('div');
+                    restaurantCard.className = 'restaurant-card';
+                    restaurantCard.onclick = function() {
+                        window.location.href = `restaurant.html?id=${restaurant.id}`;
+                    };
+                    
+                    restaurantCard.innerHTML = `
+                        <img src="${restaurant.image}" alt="${restaurant.name}">
+                        <div class="restaurant-card-content">
+                            <h3>${restaurant.name}</h3>
+                            <p>${restaurant.cuisine}</p>
+                            <p>
+                                <span class="rating">${restaurant.rating} ★</span> • ${restaurant.deliveryTime} • ${restaurant.price}
+                                <span class="discount">${restaurant.discount}</span>
+                            </p>
+                        </div>
+                    `;
+                    
+                    restaurantGrid.appendChild(restaurantCard);
+                });
+            } else {
+                restaurantGrid.innerHTML = '<p style="text-align: center; width: 100%; padding: 40px; color: #666;">No restaurants found in this category.</p>';
+            }
+        }
+    
+ function loadFile(fileName) {
+            if (window.parent && window.parent.loadFile) {
+                window.parent.loadFile(fileName);
+            } else if (window.opener && !window.opener.closed && window.opener.loadFile) {
+                window.opener.loadFile(fileName);
+            } else {
+                alert('Cannot access client.html. Please make sure this page is opened from client.html');
+            }
+        }
+
+</script>
+</body>
+</html> 
