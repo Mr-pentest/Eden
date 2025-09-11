@@ -53,7 +53,7 @@ Use Eden only in environments where you have explicit authorization. Unauthorize
 1) Clone the repository
 
 ```powershell
-git clone <your-fork-or-repo-url> eden
+git clone https://github.com/Mr-pentest/Eden.git
 cd eden
 ```
 
