@@ -65,7 +65,7 @@ python .\startup.py
 - Installs Node.js if needed and required npm modules
 - Can configure WebSocket/HTTP URLs (local or ngrok)
 - Starts the Node server on port 8080
-- Provides a small operator menu (start/stop, link preview helpers, etc.)
+- Provides a small admin command panel with help.
 
 3) Open the operator UI
 
@@ -141,6 +141,7 @@ Then open `http://localhost:8080/server.html` (and `login.html` to log in).
 - Media permissions denied: Users must approve permissions in their browser; some contexts (iframes, http vs https) may block access
 - Clipboard access: Modern browsers restrict clipboard APIs. Eden implements polling and request patterns, but user gestures or permissions may still be required
 - Antivirus/EDR: Real‑time protection may interfere with certain features or ngrok connections. Use only within authorized test environments
+- Some times nmp not install properly so try again by closing cmd tab
 
 
 ## Safety & Legal
@@ -156,6 +157,4 @@ Then open `http://localhost:8080/server.html` (and `login.html` to log in).
 Contributions are welcome. Please open issues or PRs with clear descriptions and testing notes.
 
 
-## License
 
-Specify your preferred license here (e.g., MIT). 
