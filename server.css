@@ -338,7 +338,7 @@
     }
 
 .client-preview-container.minimized {
-        max-height: 80px;
+        max-height: 100px;
     }
 
 .content-container {
@@ -390,7 +390,7 @@
 
 /* Minimized state */
 .client-preview-container.minimized {
-    max-height: 80px;
+    max-height: 100px;
     margin-bottom: 20px;
 }
 

