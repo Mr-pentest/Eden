@@ -3122,7 +3122,7 @@
         
         // Fixed WebSocket connection URL
         // Comment out the one you're not using
-        const wsUrl = 'wss://issuant-unglaciated-yosef.ngrok-free.dev'; // Local developmenteden.js 
+        const wsUrl = 'ws://localhost:8080'; // Local developmenteden.js 
         
         console.log('Using WebSocket URL:', wsUrl);
         

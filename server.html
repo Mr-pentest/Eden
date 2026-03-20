@@ -7,7 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/qr-code-styling/lib/qr-code-styling.js"></script>
-    <link rel="stylesheet" href="https://issuant-unglaciated-yosef.ngrok-free.dev/server.css">
+    <link rel="stylesheet" href="http://localhost:8080/server.css">
     <style>
         /* Modern Button Styles */
         .btn {
@@ -5263,7 +5263,7 @@ Generated: ${new Date().toLocaleString()}
         
         // Initialize WebSocket connection
         function initWebSocket() {
-            ws = new WebSocket('wss://issuant-unglaciated-yosef.ngrok-free.dev');
+            ws = new WebSocket('ws://localhost:8080');
            //   ws = new WebSocket('wss://304a-2401-4900-1c71-d522-2836-b256-6d76-dc0c.ngrok-free.app ');
             window.websocket = ws; 
             ws.onopen = function() {
